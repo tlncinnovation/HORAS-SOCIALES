@@ -10,7 +10,7 @@ st.set_page_config(
 
 # --- PEGA AQUÍ TU ENLACE PÚBLICO CSV DE GOOGLE SHEETS ---
 # (Si no usas la publicación CSV, puedes colocar la URL pública de la hoja)
-GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/TU_ID_DE_HOJA_AQUI/export?format=csv"
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTHvDUdsN5HJb2x_JwlhI5ugDJdCx_LG6BGJX1fTbvRI7P8GXUhPbuTt2rm_zVi1FrwcvZqEAatk7BV/pub?output=csv"
 
 @st.cache_data(ttl=10) # Actualiza datos cada 10 segundos
 def cargar_datos():
