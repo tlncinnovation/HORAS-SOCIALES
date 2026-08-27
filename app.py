@@ -12,6 +12,20 @@ st.set_page_config(
 
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_fdhEzpVo861lJwPzsS-Nosl6MjCoNFOMLz4y3letpSmK12V8t_qq8XC_A1oO3g0/exec"
 
+# --- FUNCIONES PARA CARGAR DATOS DESDE GOOGLE SHEETS ---
+@st.cache_data(ttl=5)
+def cargar_profesores():
+    try:
+        # Pide a Apps Script la lista de profesores registrada
+        url = APPS_SCRIPT_URL + "?action=obtener_profesores"
+        res = requests.get(url)
+        datos = res.json()
+        if "profesores" in datos:
+            return pd.DataFrame(datos["profesores"])
+        return pd.DataFrame()
+    except Exception as e:
+        return pd.DataFrame()
+
 @st.cache_data(ttl=5)
 def cargar_estudiantes():
     try:
@@ -37,7 +51,70 @@ def cargar_historial(uid):
         st.error(f"Error al cargar historial: {e}")
         return pd.DataFrame()
 
-# Manejo de navegación / vista en sesión
+# --- MANEJO DE SESIÓN Y AUTENTICACIÓN ---
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+if "usuario_actual" not in st.session_state:
+    st.session_state["usuario_actual"] = ""
+
+def login():
+    st.title("🔒 Acceso al Sistema de Horas Sociales")
+    st.subheader("Autenticación de Profesores")
+    
+    # Carga la lista de profesores desde Google Sheets
+    df_profes = cargar_profesores()
+    
+    with st.form("form_login"):
+        if not df_profes.empty and "nombre" in df_profes.columns:
+            # Dropdown con nombres de profesores
+            profesor_sel = st.selectbox("Selecciona tu nombre:", df_profes["nombre"].tolist())
+        else:
+            # Si no hay lista o no la cargó, permite ingresar texto
+            profesor_sel = st.text_input("Nombre de Profesor:")
+
+        password = st.text_input("Contraseña:", type="password")
+        btn_submit = st.form_submit_button("Iniciar Sesión")
+        
+        if btn_submit:
+            # Validación con clave maestra de respaldo O contraseña del profesor en Google Sheets
+            es_valido = False
+            
+            # Revisa en la lista de profesores
+            if not df_profes.empty and "password" in df_profes.columns:
+                prof_data = df_profes[df_profes["nombre"] == profesor_sel]
+                if not prof_data.empty:
+                    pass_correcta = str(prof_data.iloc[0]["password"])
+                    if str(password) == pass_correcta:
+                        es_valido = True
+            
+            # Clave de emergencia/administrador por si acaso
+            if password == "admin123":
+                es_valido = True
+
+            if es_valido:
+                st.session_state["autenticado"] = True
+                st.session_state["usuario_actual"] = profesor_sel
+                st.success(f"¡Bienvenido(a), {profesor_sel}!")
+                st.rerun()
+            else:
+                st.error("❌ Contraseña incorrecta. Inténtalo de nuevo.")
+
+# SI NO ESTÁ AUTENTICADO, MUESTRA EL LOGIN Y DETIENE LA EJECUCIÓN
+if not st.session_state["autenticado"]:
+    login()
+    st.stop()
+
+# =========================================================
+# A PARTIR DE AQUÍ SOLO ACCEDEN LOS PROFESORES LOGUEADOS
+# =========================================================
+
+# Barra lateral con usuario actual y botón de salir
+st.sidebar.markdown(f"👨‍🏫 **Profesor:** {st.session_state['usuario_actual']}")
+if st.sidebar.button("🚪 Cerrar Sesión"):
+    st.session_state["autenticado"] = False
+    st.session_state["estudiante_seleccionado"] = None
+    st.rerun()
+
 if "estudiante_seleccionado" not in st.session_state:
     st.session_state["estudiante_seleccionado"] = None
 
@@ -59,7 +136,6 @@ if st.session_state["estudiante_seleccionado"] is not None:
     faltantes = max(0, 120 - horas_actuales)
     porcentaje = min(100, int((horas_actuales / 120) * 100))
 
-    # --- FILA DE MÉTRICAS Y GRÁFICO CIRCULAR ---
     col_metrics, col_chart = st.columns([1, 1])
 
     with col_metrics:
@@ -75,13 +151,11 @@ if st.session_state["estudiante_seleccionado"] is not None:
     with col_chart:
         st.markdown("### ⭕ Porcentaje de Avance (120h)")
         
-        # Datos para el gráfico circular
         data_pie = pd.DataFrame({
             "Estado": ["Horas Completadas", "Horas Faltantes"],
             "Horas": [horas_actuales, faltantes]
         })
         
-        # Gráfico Circular Donut con Altair
         chart = alt.Chart(data_pie).mark_arc(innerRadius=60).encode(
             theta=alt.Theta(field="Horas", type="quantitative"),
             color=alt.Color(
@@ -101,22 +175,18 @@ if st.session_state["estudiante_seleccionado"] is not None:
 
     st.divider()
 
-    # --- SECCIÓN DE HISTORIAL Y GRÁFICO DE BARRAS POR DÍA ---
     st.subheader("📊 Historial de Registros y Asistencia")
     df_hist = cargar_historial(est["uid"])
 
     if not df_hist.empty:
-        # Formatear fechas para gráfico de barras por día
         df_hist["fecha_dt"] = pd.to_datetime(df_hist["fecha"])
         df_hist["dia"] = df_hist["fecha_dt"].dt.strftime('%Y-%m-%d')
         
-        # Agrupar horas por día
         df_por_dia = df_hist.groupby("dia")["horas"].sum().reset_index()
 
         st.markdown("### 📈 Horas Sumadas por Día")
         st.bar_chart(df_por_dia.set_index("dia")["horas"])
 
-        # Tabla de Asistencia / Historial
         st.markdown("### 📋 Tabla de Asistencia Detallada")
         df_tabla = df_hist[["fechaTxt", "horas", "profesor"]].rename(columns={
             "fechaTxt": "Fecha y Hora",
@@ -153,7 +223,6 @@ else:
                 df["curso"].str.contains(busqueda, case=False, na=False)
             ]
 
-        # Métricas principales
         col1, col2, col3 = st.columns(3)
         col1.metric("Estudiantes Registrados", len(df))
         col2.metric("Graduados (120h)", len(df[df["horas"] >= 120]))
