@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import altair as alt
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -58,19 +59,45 @@ if st.session_state["estudiante_seleccionado"] is not None:
     faltantes = max(0, 120 - horas_actuales)
     porcentaje = min(100, int((horas_actuales / 120) * 100))
 
-    # --- METRICAS Y BARRA DE PROGRESO NATIVA ---
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Horas Completadas", f"{horas_actuales} hrs")
-    col2.metric("Horas Faltantes", f"{faltantes} hrs")
-    col3.metric("Porcentaje de Avance", f"{porcentaje}%")
+    # --- FILA DE MÉTRICAS Y GRÁFICO CIRCULAR ---
+    col_metrics, col_chart = st.columns([1, 1])
 
-    st.write("### Progreso General (120 hrs)")
-    st.progress(porcentaje / 100)
-    
-    if horas_actuales >= 120:
-        st.success("🎉 ¡Meta Alcanzada! Estudiante Apto para Graduación.")
-    else:
-        st.info(f"Faltan {faltantes} horas para completar las 120h obligatorias.")
+    with col_metrics:
+        st.metric("Horas Completadas", f"{horas_actuales} / 120 hrs")
+        st.metric("Horas Faltantes", f"{faltantes} hrs")
+        st.metric("Porcentaje de Avance", f"{porcentaje}%")
+        
+        if horas_actuales >= 120:
+            st.success("🎉 ¡Meta Alcanzada! Estudiante Apto para Graduación.")
+        else:
+            st.info(f"Faltan {faltantes} horas para completar las 120h obligatorias.")
+
+    with col_chart:
+        st.markdown("### ⭕ Porcentaje de Avance (120h)")
+        
+        # Datos para el gráfico circular
+        data_pie = pd.DataFrame({
+            "Estado": ["Horas Completadas", "Horas Faltantes"],
+            "Horas": [horas_actuales, faltantes]
+        })
+        
+        # Gráfico Circular Donut con Altair
+        chart = alt.Chart(data_pie).mark_arc(innerRadius=60).encode(
+            theta=alt.Theta(field="Horas", type="quantitative"),
+            color=alt.Color(
+                field="Estado", 
+                type="nominal",
+                scale=alt.Scale(
+                    domain=["Horas Completadas", "Horas Faltantes"],
+                    range=["#2ecc71", "#e74c3c"]
+                )
+            ),
+            tooltip=["Estado", "Horas"]
+        ).properties(
+            height=300
+        )
+        
+        st.altair_chart(chart, use_container_width=True)
 
     st.divider()
 
@@ -87,7 +114,6 @@ if st.session_state["estudiante_seleccionado"] is not None:
         df_por_dia = df_hist.groupby("dia")["horas"].sum().reset_index()
 
         st.markdown("### 📈 Horas Sumadas por Día")
-        # Gráfico de barras nativo de Streamlit
         st.bar_chart(df_por_dia.set_index("dia")["horas"])
 
         # Tabla de Asistencia / Historial
@@ -99,7 +125,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
         })
         st.dataframe(df_tabla, use_container_width=True)
     else:
-        st.warning("Este estudiante aún no tiene registros en el Historial.")
+        st.warning("Este estudiante aún no tiene registros detallados en el Historial.")
 
 # =========================================================
 # VISTA 1: LISTA GENERAL DE ESTUDIANTES
