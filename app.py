@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import requests
-import plotly.express as px
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -57,36 +56,21 @@ if st.session_state["estudiante_seleccionado"] is not None:
 
     horas_actuales = int(est["horas"])
     faltantes = max(0, 120 - horas_actuales)
+    porcentaje = min(100, int((horas_actuales / 120) * 100))
 
-    # --- FILA DE MÉTRICAS Y GRÁFICO CIRCULAR ---
-    col_metrics, col_chart = st.columns([1, 1])
+    # --- METRICAS Y BARRA DE PROGRESO NATIVA ---
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Horas Completadas", f"{horas_actuales} hrs")
+    col2.metric("Horas Faltantes", f"{faltantes} hrs")
+    col3.metric("Porcentaje de Avance", f"{porcentaje}%")
 
-    with col_metrics:
-        st.metric("Horas Completadas", f"{horas_actuales} / 120 hrs")
-        st.metric("Horas Faltantes", f"{faltantes} hrs")
-        porcentaje = min(100, int((horas_actuales / 120) * 100))
-        
-        if horas_actuales >= 120:
-            st.success("🎉 ¡Meta Alcanzada! Estudiante Apto para Graduación.")
-        else:
-            st.info(f"Progreso Actual: {porcentaje}% completado.")
-
-    with col_chart:
-        # Gráfico Circular (Donut Chart)
-        df_pie = pd.DataFrame({
-            "Estado": ["Horas Completadas", "Horas Faltantes"],
-            "Horas": [horas_actuales, faltantes]
-        })
-        fig_pie = px.pie(
-            df_pie, 
-            values="Horas", 
-            names="Estado", 
-            hole=0.5,
-            color="Estado",
-            color_discrete_map={"Horas Completadas": "#2ecc71", "Horas Faltantes": "#e74c3c"},
-            title="Porcentaje de Avance (120h)"
-        )
-        st.plotly_chart(fig_pie, use_container_width=True)
+    st.write("### Progreso General (120 hrs)")
+    st.progress(porcentaje / 100)
+    
+    if horas_actuales >= 120:
+        st.success("🎉 ¡Meta Alcanzada! Estudiante Apto para Graduación.")
+    else:
+        st.info(f"Faltan {faltantes} horas para completar las 120h obligatorias.")
 
     st.divider()
 
@@ -102,19 +86,12 @@ if st.session_state["estudiante_seleccionado"] is not None:
         # Agrupar horas por día
         df_por_dia = df_hist.groupby("dia")["horas"].sum().reset_index()
 
-        # Gráfico de Barras de Horas por Día
-        fig_bar = px.bar(
-            df_por_dia, 
-            x="dia", 
-            y="horas", 
-            labels={"dia": "Fecha", "horas": "Horas Registradas"},
-            title="Horas Sumadas por Día",
-            color_discrete_sequence=["#3498db"]
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.markdown("### 📈 Horas Sumadas por Día")
+        # Gráfico de barras nativo de Streamlit
+        st.bar_chart(df_por_dia.set_index("dia")["horas"])
 
         # Tabla de Asistencia / Historial
-        st.markdown("### 📋 Tabla de Asistencia")
+        st.markdown("### 📋 Tabla de Asistencia Detallada")
         df_tabla = df_hist[["fechaTxt", "horas", "profesor"]].rename(columns={
             "fechaTxt": "Fecha y Hora",
             "horas": "Horas Sumadas",
@@ -122,7 +99,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
         })
         st.dataframe(df_tabla, use_container_width=True)
     else:
-        st.warning("Este estudiante aún no tiene registros detallados en el Historial (se actualizarán al pasar la tarjeta nuevamente).")
+        st.warning("Este estudiante aún no tiene registros en el Historial.")
 
 # =========================================================
 # VISTA 1: LISTA GENERAL DE ESTUDIANTES
@@ -175,7 +152,7 @@ else:
                     st.caption(f"**{horas}** / 120 hrs ({porcentaje}%) | ÚLTIMA MARCA: {row.get('ultimaFecha', 'N/A')}")
                 
                 with col_btn:
-                    st.write("") # Espaciador
+                    st.write("") 
                     if st.button("👁️ Ver Perfil", key=f"btn_{row['uid']}"):
                         st.session_state["estudiante_seleccionado"] = row
                         st.rerun()
