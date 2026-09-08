@@ -142,7 +142,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
             
             st.markdown("### 📜 Certificado de Servicio Social")
             try:
-                img_path = "WhatsApp Image 2026-09-08 at 8.12.21 AM.jpeg"
+                img_path = "certificado.jpeg"
                 img = Image.open(img_path)
                 draw = ImageDraw.Draw(img)
                 
@@ -167,7 +167,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
                     mime="image/jpeg"
                 )
             except FileNotFoundError:
-                st.error("⚠️ La imagen base del certificado no se encontró. Asegúrate de subir 'WhatsApp Image 2026-09-08 at 8.12.21 AM.jpeg' a tu repositorio.")
+                st.error("⚠️ La imagen base del certificado no se encontró. Asegúrate de subir 'certificado.jpeg' a tu repositorio.")
         else:
             st.info(f"Faltan {faltantes} horas para completar las 120h obligatorias.")
 
