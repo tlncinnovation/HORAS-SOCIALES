@@ -14,6 +14,13 @@ st.set_page_config(
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_fdhEzpVo861lJwPzsS-Nosl6MjCoNFOMLz4y3letpSmK12V8t_qq8XC_A1oO3g0/exec"
 
 
+def formatear_uid(uid):
+    s = str(uid).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
+
+
 def obtener_fuente(tamano=28):
     rutas = [
         "arial.ttf",
@@ -102,7 +109,8 @@ def cargar_estudiantes():
 
 def cargar_historial(uid):
     try:
-        params = {"action": "obtener_historial", "uid": str(uid).strip()}
+        uid_clean = formatear_uid(uid)
+        params = {"action": "obtener_historial", "uid": uid_clean}
         res = requests.get(APPS_SCRIPT_URL, params=params, timeout=10)
         datos = res.json()
         if "historial" in datos and len(datos["historial"]) > 0:
@@ -228,7 +236,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
 
     st.title(f"👤 {est['nombre']}")
     st.subheader(
-        f"Curso: {est['curso']} | Doc. TI: `{doc_ti}` | UID: `{est['uid']}`"
+        f"Curso: {est['curso']} | Doc. TI: `{doc_ti}` | UID: `{formatear_uid(est['uid'])}`"
     )
     st.caption(
         f"📧 Correo Electrónico: {est.get('correo', 'Sin correo registrado')}"
@@ -310,7 +318,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
                     st.error(f"Error al procesar la imagen: {ex_cert}")
             else:
                 st.error(
-                    "⚠️ Sube una imagen llamada 'Certificado.jpg' o 'Certificado.png' a la raíz de tu repositorio en GitHub."
+                    "⚠️ Sube una imagen llamada 'Certificado.jpg' a la raíz de tu repositorio en GitHub."
                 )
         else:
             st.info(
@@ -346,16 +354,63 @@ if st.session_state["estudiante_seleccionado"] is not None:
 
     st.divider()
 
-    st.subheader("📊 Historial de Registros y Asistencia")
+    # =========================================================
+    # SECCIÓN DE HISTORIAL Y GRÁFICA DETALLADA
+    # =========================================================
+    st.subheader("📊 Historial de Registros y Gráfica de Asistencia")
     df_hist = cargar_historial(est["uid"])
 
     if not df_hist.empty:
+        df_hist_norm = df_hist.copy()
+        df_hist_norm.columns = [
+            str(c).strip().lower() for c in df_hist_norm.columns
+        ]
+
+        col_fecha = next(
+            (
+                c
+                for c in df_hist_norm.columns
+                if "fecha" in c or "date" in c or "time" in c
+            ),
+            None,
+        )
+        col_horas = next(
+            (c for c in df_hist_norm.columns if "hora" in c), None
+        )
+
+        if col_fecha and col_horas:
+            df_hist_norm["horas_num"] = pd.to_numeric(
+                df_hist_norm[col_horas], errors="coerce"
+            ).fillna(0)
+            df_hist_norm["fecha_dt"] = pd.to_datetime(
+                df_hist_norm[col_fecha], dayfirst=True, errors="coerce"
+            )
+            df_hist_norm["dia"] = df_hist_norm["fecha_dt"].dt.strftime(
+                "%d/%m/%Y"
+            )
+
+            df_por_dia = df_hist_norm.groupby("dia", as_index=False)[
+                "horas_num"
+            ].sum()
+
+            st.markdown("### 📈 Horas Registradas por Día")
+            st.bar_chart(data=df_por_dia, x="dia", y="horas_num")
+
         st.markdown("### 📋 Tabla de Asistencia Registrada")
         st.dataframe(df_hist, use_container_width=True)
     else:
         st.warning(
-            "Este estudiante aún no tiene registros detallados en la pestaña Historial."
+            "Este estudiante aún no tiene registros asociados en la pestaña 'Historial'."
         )
+        with st.expander("🔍 Diagnóstico de Búsqueda"):
+            st.write(f"**UID consultado:** `{formatear_uid(est['uid'])}`")
+            st.write(
+                "Si en tu Google Sheet sí tienes datos para este estudiante en la pestaña **Historial**, comprueba:"
+            )
+            st.write("1. Que el UID impreso arriba coincida con el de la hoja.")
+            st.write(
+                "2. Que hayas hecho clic en **Implementar > Nueva versión** en Google Apps Script."
+            )
 
     st.divider()
     with st.expander("⚠️ Zona de Peligro: Eliminar Perfil del Estudiante"):
@@ -371,9 +426,10 @@ if st.session_state["estudiante_seleccionado"] is not None:
             disabled=(confirm_txt != frase_req or not chk1),
         ):
             try:
-                url_del = f"{APPS_SCRIPT_URL}?action=eliminar_estudiante&uid={est['uid']}"
+                uid_clean = formatear_uid(est["uid"])
+                url_del = f"{APPS_SCRIPT_URL}?action=eliminar_estudiante&uid={uid_clean}"
                 requests.get(url_del, timeout=10)
-                st.success(f"Perfil eliminado correctamente.")
+                st.success("Perfil eliminado correctamente.")
                 st.session_state["estudiante_seleccionado"] = None
                 st.cache_data.clear()
                 st.rerun()
@@ -447,7 +503,9 @@ else:
 
                 with col_btn:
                     st.write("")
-                    if st.button("👁️ Ver Perfil", key=f"btn_{row['uid']}"):
+                    if st.button(
+                        "👁️ Ver Perfil", key=f"btn_{formatear_uid(row['uid'])}"
+                    ):
                         st.session_state["estudiante_seleccionado"] = row
                         st.rerun()
 
