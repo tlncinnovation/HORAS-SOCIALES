@@ -49,8 +49,19 @@ def cargar_profesores():
         if "profesores" in datos:
             df = pd.DataFrame(datos["profesores"])
             if not df.empty:
-                # Estandarizamos las columnas de profesores a minúsculas (¡El arreglo mágico!)
+                # 1. Pasamos todo a minúsculas
                 df.columns = [str(c).strip().lower() for c in df.columns]
+                
+                # 2. Si la columna se llama "nombre del tacher", la renombramos internamente a "nombre"
+                col_nombre = next((c for c in df.columns if "nombre" in c), None)
+                if col_nombre:
+                    df["nombre"] = df[col_nombre]
+                    
+                # 3. Si dice "contraseña" (con ñ), la renombramos a "password" para que Python no pelee
+                col_pass = next((c for c in df.columns if "contra" in c or "pass" in c), None)
+                if col_pass:
+                    df["password"] = df[col_pass]
+                    
             return df
         return pd.DataFrame()
     except Exception:
