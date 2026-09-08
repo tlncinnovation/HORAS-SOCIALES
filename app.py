@@ -11,8 +11,8 @@ st.set_page_config(
     page_title="Control de Horas Sociales", page_icon="🎓", layout="wide"
 )
 
-# Tu enlace de Google Apps Script
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwqOZZQ-iV1fiHAacePu0ksWzdvm90arT_UlYemq88UO-OiNTUKdvnIE5Br4fbnc-Y/exec"
+# 👇 Pega TU NUEVO LINK aquí entre las comillas 👇
+APPS_SCRIPT_URL = "PEGAR_TU_NUEVO_LINK_AQUI"
 
 def formatear_uid(uid):
     s = str(uid).strip()
@@ -44,12 +44,16 @@ def cargar_profesores():
         try:
             datos = res.json()
         except Exception:
-            st.error(f"🚨 Error Profesores: Apps Script no devolvió datos válidos. Google dice: {res.text[:100]}")
             return pd.DataFrame()
             
-        return pd.DataFrame(datos["profesores"]) if "profesores" in datos else pd.DataFrame()
-    except Exception as e:
-        st.error(f"Error de red al cargar profesores: {e}")
+        if "profesores" in datos:
+            df = pd.DataFrame(datos["profesores"])
+            if not df.empty:
+                # Estandarizamos las columnas de profesores a minúsculas (¡El arreglo mágico!)
+                df.columns = [str(c).strip().lower() for c in df.columns]
+            return df
+        return pd.DataFrame()
+    except Exception:
         return pd.DataFrame()
 
 
@@ -61,7 +65,7 @@ def cargar_estudiantes():
         try:
             datos = res.json()
         except Exception:
-            st.error(f"🚨 Error Estudiantes: Apps Script no devolvió JSON. Respuesta: {res.text[:100]}")
+            st.error(f"🚨 Error Estudiantes: Apps Script no devolvió JSON.")
             return pd.DataFrame()
 
         lista = datos.get("estudiantes") or datos.get("resultados") or []
@@ -83,27 +87,24 @@ def cargar_estudiantes():
             return df
         return pd.DataFrame()
     except Exception as e:
-        st.error(f"Error de red con Google Sheets: {e}")
         return pd.DataFrame()
 
 
 def cargar_historial(uid):
     try:
         uid_clean = formatear_uid(uid)
-        # SOLUCIÓN APLICADA: URL forzada completa para que no se pierdan los datos
         url_exacta = f"{APPS_SCRIPT_URL}?action=obtener_historial&uid={uid_clean}"
         res = requests.get(url_exacta, timeout=15)
         
         try:
             datos = res.json()
         except Exception:
-            st.error(f"🚨 Error Historial: Respuesta inválida. {res.text[:100]}")
             return pd.DataFrame(), None
             
         if "historial" in datos and len(datos["historial"]) > 0:
             return pd.DataFrame(datos["historial"]), None
         else:
-            return pd.DataFrame(), datos # Retorna vacío y la respuesta cruda para depurar
+            return pd.DataFrame(), datos
     except Exception as e:
         return pd.DataFrame(), str(e)
 
@@ -129,7 +130,8 @@ def login():
 
         if btn_submit:
             es_valido = False
-            if not df_profes.empty:
+            # Blindaje extra para que no explote si la columna no existe
+            if not df_profes.empty and "nombre" in df_profes.columns:
                 prof_data = df_profes[df_profes["nombre"] == profesor_sel]
                 if not prof_data.empty:
                     pass_correcta = str(
@@ -140,16 +142,17 @@ def login():
                     if str(password).strip() == pass_correcta:
                         es_valido = True
 
+            # Si es admin siempre entra
             if password == "admin123":
                 es_valido = True
 
             if es_valido:
                 st.session_state["autenticado"] = True
-                st.session_state["usuario_actual"] = profesor_sel
-                st.success(f"¡Bienvenido(a), {profesor_sel}!")
+                st.session_state["usuario_actual"] = profesor_sel if profesor_sel else "Administrador"
+                st.success(f"¡Bienvenido(a)!")
                 st.rerun()
             else:
-                st.error("❌ Contraseña incorrecta.")
+                st.error("❌ Contraseña incorrecta o usuario no encontrado.")
 
 if not st.session_state["autenticado"]:
     login()
@@ -381,17 +384,14 @@ else:
 
         df["horas_num"] = pd.to_numeric(df["horas"], errors="coerce").fillna(0)
 
-        # Aplicar filtro de curso
         if curso_sel != "Todos":
             df = df[df["curso"] == curso_sel]
 
-        # Aplicar filtro de estado (Las 120 horas)
         if estado_sel == "Ya terminaron (120h+)":
             df = df[df["horas_num"] >= 120]
         elif estado_sel == "En proceso (Menos de 120h)":
             df = df[df["horas_num"] < 120]
 
-        # Aplicar barra de búsqueda
         if busqueda:
             df = df[
                 df["nombre"].astype(str).str.contains(busqueda, case=False, na=False)
