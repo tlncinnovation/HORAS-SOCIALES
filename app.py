@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 # 👇 Pega TU NUEVO LINK aquí entre las comillas 👇
-APPS_SCRIPT_URL = "PEGAR_TU_NUEVO_LINK_AQUI"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwqOZZQ-iV1fiHAacePu0ksWzdvm90arT_UlYemq88UO-OiNTUKdvnIE5Br4fbnc-Y/exec"
 
 def formatear_uid(uid):
     s = str(uid).strip()
