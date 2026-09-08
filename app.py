@@ -6,7 +6,9 @@ from datetime import datetime
 import io
 from PIL import Image, ImageDraw, ImageFont
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
+# =========================================================
+# CONFIGURACIÓN DE LA PÁGINA
+# =========================================================
 st.set_page_config(
     page_title="Control de Horas Sociales",
     page_icon="🎓",
@@ -15,8 +17,10 @@ st.set_page_config(
 
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_fdhEzpVo861lJwPzsS-Nosl6MjCoNFOMLz4y3letpSmK12V8t_qq8XC_A1oO3g0/exec"
 
-# --- FUNCIONES PARA CARGAR DATOS DESDE GOOGLE SHEETS ---
-@st.cache_data(ttl=5)
+# =========================================================
+# FUNCIONES PARA CARGAR DATOS DESDE GOOGLE SHEETS
+# =========================================================
+@st.cache_data(ttl=300)
 def cargar_profesores():
     try:
         url = APPS_SCRIPT_URL + "?action=obtener_profesores"
@@ -25,10 +29,10 @@ def cargar_profesores():
         if "profesores" in datos:
             return pd.DataFrame(datos["profesores"])
         return pd.DataFrame()
-    except Exception as e:
+    except Exception:
         return pd.DataFrame()
 
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=300)
 def cargar_estudiantes():
     try:
         url = APPS_SCRIPT_URL + "?action=buscar_web&q="
@@ -53,7 +57,9 @@ def cargar_historial(uid):
         st.error(f"Error al cargar historial: {e}")
         return pd.DataFrame()
 
-# --- MANEJO DE SESIÓN Y AUTENTICACIÓN ---
+# =========================================================
+# MANEJO DE SESIÓN Y AUTENTICACIÓN
+# =========================================================
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 if "usuario_actual" not in st.session_state:
@@ -76,7 +82,6 @@ def login():
         
         if btn_submit:
             es_valido = False
-            
             if not df_profes.empty and "password" in df_profes.columns:
                 prof_data = df_profes[df_profes["nombre"] == profesor_sel]
                 if not prof_data.empty:
@@ -100,9 +105,8 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # =========================================================
-# A PARTIR DE AQUÍ SOLO ACCEDEN LOS PROFESORES LOGUEADOS
+# MENÚ LATERAL Y SESIÓN
 # =========================================================
-
 st.sidebar.markdown(f"👨‍🏫 **Profesor:** {st.session_state['usuario_actual']}")
 if st.sidebar.button("🚪 Cerrar Sesión"):
     st.session_state["autenticado"] = False
@@ -142,20 +146,25 @@ if st.session_state["estudiante_seleccionado"] is not None:
             
             st.markdown("### 📜 Certificado de Servicio Social")
             try:
-                img_path = "Certificado.jpeg"
+                # Se abre la imagen base del certificado
+                img_path = "WhatsApp Image 2026-09-08 at 8.12.21 AM.jpeg"
                 img = Image.open(img_path)
                 draw = ImageDraw.Draw(img)
                 
                 try:
-                    font = ImageFont.truetype("arial.ttf", 40)
-                except:
+                    font = ImageFont.truetype("arial.ttf", 32)
+                except Exception:
                     font = ImageFont.load_default()
 
-                pos_x = 380 
-                pos_y = 480 
-                
-                draw.text((pos_x, pos_y), str(est['nombre']), fill="black", font=font)
-                
+                # 1. Nombre del estudiante (frente a 'Que el (la) joven:')
+                pos_nombre = (430, 465) 
+                draw.text(pos_nombre, str(est['nombre']).upper(), fill="black", font=font)
+
+                # 2. Curso del estudiante (frente a 'del grado')
+                pos_curso = (1120, 520) 
+                draw.text(pos_curso, str(est['curso']).upper(), fill="black", font=font)
+
+                # Convertir a buffer de imagen
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG")
                 img_bytes = buf.getvalue()
@@ -167,13 +176,12 @@ if st.session_state["estudiante_seleccionado"] is not None:
                     mime="image/jpeg"
                 )
             except FileNotFoundError:
-                st.error("⚠️ La imagen base del certificado no se encontró. Asegúrate de subir 'certificado.jpeg' a tu repositorio.")
+                st.error("⚠️ La imagen del certificado no se encontró. Verifica que 'WhatsApp Image 2026-09-08 at 8.12.21 AM.jpeg' esté en la misma carpeta que este script.")
         else:
             st.info(f"Faltan {faltantes} horas para completar las 120h obligatorias.")
 
     with col_chart:
         st.markdown("### ⭕ Porcentaje de Avance (120h)")
-        
         data_pie = pd.DataFrame({
             "Estado": ["Horas Completadas", "Horas Faltantes"],
             "Horas": [horas_actuales, faltantes]
@@ -190,9 +198,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
                 )
             ),
             tooltip=["Estado", "Horas"]
-        ).properties(
-            height=300
-        )
+        ).properties(height=300)
         
         st.altair_chart(chart, use_container_width=True)
 
@@ -204,7 +210,6 @@ if st.session_state["estudiante_seleccionado"] is not None:
     if not df_hist.empty:
         df_hist["fecha_dt"] = pd.to_datetime(df_hist["fecha"])
         df_hist["dia"] = df_hist["fecha_dt"].dt.strftime('%d/%m/%Y')
-        
         df_por_dia = df_hist.groupby("dia")["horas"].sum().reset_index()
 
         st.markdown("### 📈 Horas Sumadas por Día")
@@ -220,6 +225,33 @@ if st.session_state["estudiante_seleccionado"] is not None:
     else:
         st.warning("Este estudiante aún no tiene registros detallados en el Historial.")
 
+    # ---------------------------------------------------------
+    # ELIMINACIÓN DE PERFIL CON TRIPLE CONFIRMACIÓN
+    # ---------------------------------------------------------
+    st.divider()
+    with st.expander("⚠️ Zona de Peligro: Eliminar Perfil del Estudiante"):
+        st.warning("Usa esta opción únicamente cuando el estudiante se haya graduado de 11° y tenga su certificado impreso.")
+        
+        chk1 = st.checkbox("1. Confirmo que deseo iniciar el proceso de eliminación.")
+        chk2 = st.checkbox("2. Entiendo que esta acción borrará permanentemente todo el historial de horas.", disabled=not chk1)
+        
+        frase_requerida = f"BORRAR {est['nombre']}"
+        confirmacion_texto = st.text_input(
+            f"3. Escribe exactamente '{frase_requerida}' para habilitar el borrado:", 
+            disabled=not chk2
+        )
+        
+        if st.button("🗑️ Eliminar Perfil Definitivamente", disabled=(confirmacion_texto != frase_requerida or not chk2)):
+            try:
+                url_del = f"{APPS_SCRIPT_URL}?action=eliminar_estudiante&uid={est['uid']}"
+                requests.get(url_del)
+                st.success(f"El perfil de {est['nombre']} ha sido eliminado.")
+                st.session_state["estudiante_seleccionado"] = None
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as ex:
+                st.error(f"Error al conectar con la base de datos: {ex}")
+
 # =========================================================
 # VISTA 1: LISTA GENERAL DE ESTUDIANTES
 # =========================================================
@@ -231,16 +263,12 @@ else:
 
     if not df.empty:
         st.sidebar.header("🔍 Filtros de Búsqueda")
-        
         busqueda = st.sidebar.text_input("Buscar por Nombre, UID o Curso:")
-        
         cursos_disponibles = ["Todos"] + sorted(list(df["curso"].unique()))
         curso_seleccionado = st.sidebar.selectbox("Filtrar por Curso:", cursos_disponibles)
         
         estado_opciones = ["Todos", "En progreso (< 120h)", "Terminados / Con Certificado (120h)"]
         estado_seleccionado = st.sidebar.selectbox("Estado del Servicio:", estado_opciones)
-        
-        # Formato ajustado a Día/Mes/Año (DD/MM/YYYY)
         filtro_fecha = st.sidebar.date_input("Filtrar por Última Fecha:", value=None, format="DD/MM/YYYY")
 
         if curso_seleccionado != "Todos":
