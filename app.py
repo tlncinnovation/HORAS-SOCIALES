@@ -146,8 +146,8 @@ if st.session_state["estudiante_seleccionado"] is not None:
             
             st.markdown("### 📜 Certificado de Servicio Social")
             try:
-                # Se abre la imagen base del certificado
-                img_path = "WhatsApp Image 2026-09-08 at 8.12.21 AM.jpeg"
+                # Nombre del archivo actualizado
+                img_path = "Certificado.jpeg"
                 img = Image.open(img_path)
                 draw = ImageDraw.Draw(img)
                 
@@ -176,7 +176,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
                     mime="image/jpeg"
                 )
             except FileNotFoundError:
-                st.error("⚠️ La imagen del certificado no se encontró. Verifica que 'WhatsApp Image 2026-09-08 at 8.12.21 AM.jpeg' esté en la misma carpeta que este script.")
+                st.error("⚠️ La imagen del certificado no se encontró. Verifica que el archivo 'Certificado.jpeg' esté en la misma carpeta que este script.")
         else:
             st.info(f"Faltan {faltantes} horas para completar las 120h obligatorias.")
 
