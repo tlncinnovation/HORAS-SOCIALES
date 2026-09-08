@@ -323,6 +323,11 @@ else:
         estado_opciones = ["Todos", "En progreso (< 120h)", "Terminados / Con Certificado (120h)"]
         estado_sel = st.sidebar.selectbox("Estado del Servicio:", estado_opciones)
 
+        # --- FILTRO POR RANGO DE FECHAS (ÚLTIMA MARCA) ---
+        st.sidebar.markdown("**📅 Filtrar por Última Marca**")
+        fecha_inicio = st.sidebar.date_input("Desde:", value=None, format="DD/MM/YYYY")
+        fecha_fin = st.sidebar.date_input("Hasta:", value=None, format="DD/MM/YYYY")
+
         if curso_sel != "Todos":
             df = df[df["curso"] == curso_sel]
 
@@ -331,6 +336,17 @@ else:
             df = df[df["horas_num"] < 120]
         elif estado_sel == "Terminados / Con Certificado (120h)":
             df = df[df["horas_num"] >= 120]
+
+        # --- APLICACIÓN DEL FILTRO DE RANGO DE FECHAS ---
+        if fecha_inicio is not None and fecha_fin is not None:
+            if fecha_inicio <= fecha_fin:
+                fechas_convertidas = pd.to_datetime(df["ultimaFecha"], format="mixed", dayfirst=True, errors="coerce")
+                df = df[
+                    (fechas_convertidas.dt.date >= fecha_inicio) & 
+                    (fechas_convertidas.dt.date <= fecha_fin)
+                ]
+            else:
+                st.sidebar.error("⚠️ La fecha 'Desde' no puede ser posterior a 'Hasta'.")
 
         if busqueda:
             df = df[
