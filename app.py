@@ -64,6 +64,17 @@ def cargar_estudiantes():
         
         if lista:
             df = pd.DataFrame(lista)
+            
+            # --- CORRECCIÓN: Normalizar el nombre de la columna del documento ---
+            # Busca las posibles formas en las que el Sheets envía "documento ti"
+            if "documento ti" in df.columns:
+                df["documento"] = df["documento ti"]
+            elif "documento_ti" in df.columns:
+                df["documento"] = df["documento_ti"]
+            elif "documentoti" in df.columns:
+                df["documento"] = df["documentoti"]
+            # --------------------------------------------------------------------
+            
             cols_obligatorias = ["nombre", "uid", "curso", "horas", "ultimaFecha", "correo", "documento"]
             for col in cols_obligatorias:
                 if col not in df.columns:
@@ -219,8 +230,11 @@ if st.session_state["estudiante_seleccionado"] is not None:
                 # Nombre
                 draw.text((480, 468), str(est['nombre']).upper(), fill="black", font=font_cert)
                 
-                # Documento TI (Ubicado en la misma línea del curso, pero antes)
+                # Documento TI
                 doc_ti = str(est.get('documento', ''))
+                # Verificación extra en caso de que esté guardado directamente como 'documento ti' en el dict
+                if doc_ti == "N/A" and "documento ti" in est:
+                    doc_ti = str(est["documento ti"])
                 draw.text((700, 525), doc_ti, fill="black", font=font_cert) 
                 
                 # Curso
