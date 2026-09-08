@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 # Tu enlace de Google Apps Script
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_fdhEzpVo861lJwPzsS-Nosl6MjCoNFOMLz4y3letpSmK12V8t_qq8XC_A1oO3g0/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwqOZZQ-iV1fiHAacePu0ksWzdvm90arT_UlYemq88UO-OiNTUKdvnIE5Br4fbnc-Y/exec"
 
 def formatear_uid(uid):
     s = str(uid).strip()
