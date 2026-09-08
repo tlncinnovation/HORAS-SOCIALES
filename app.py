@@ -238,15 +238,17 @@ if st.session_state["estudiante_seleccionado"] is not None:
             st.success("🎉 ¡Meta Alcanzada! Estudiante Apto para Graduación.")
             st.markdown("### 📜 Certificado de Servicio Social")
             try:
-                img = Image.open("Certificado.jpeg")
+               # Ya tiene la correccion a .jpg
+                img = Image.open("Certificado.jpg")
                 draw = ImageDraw.Draw(img)
                 font_cert = obtener_fuente(28)
 
                 # --- DATOS DEL CERTIFICADO ---
+                # Modifica los números entre paréntesis (X, Y) para mover el texto
                 draw.text((480, 468), str(est['nombre']).upper(), fill="black", font=font_cert)
                 draw.text((700, 525), doc_ti, fill="black", font=font_cert) 
                 draw.text((1100, 525), str(est['curso']).upper(), fill="black", font=font_cert)
-                draw.text((380, 580), "U", fill="black", font=font_cert) 
+                draw.text((380, 580), "U", fill="black", font=font_cert)
 
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG")
