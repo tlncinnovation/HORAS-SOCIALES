@@ -140,28 +140,22 @@ if st.session_state["estudiante_seleccionado"] is not None:
         if horas_actuales >= 120:
             st.success("🎉 ¡Meta Alcanzada! Estudiante Apto para Graduación.")
             
-            # --- NUEVO APARTADO: GENERACIÓN DE CERTIFICADO ---
             st.markdown("### 📜 Certificado de Servicio Social")
             try:
-                # Abrir la imagen base proporcionada
                 img_path = "WhatsApp Image 2026-09-08 at 8.12.21 AM.jpeg"
                 img = Image.open(img_path)
                 draw = ImageDraw.Draw(img)
                 
-                # Intentar cargar una fuente de buen tamaño, si no, usa la por defecto
                 try:
                     font = ImageFont.truetype("arial.ttf", 40)
                 except:
                     font = ImageFont.load_default()
 
-                # Posición (x, y) donde irá el nombre. Ajusta estos números si queda descuadrado
                 pos_x = 380 
                 pos_y = 480 
                 
-                # Dibujar el nombre en la imagen
                 draw.text((pos_x, pos_y), str(est['nombre']), fill="black", font=font)
                 
-                # Convertir la imagen editada a bytes para descargarla
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG")
                 img_bytes = buf.getvalue()
@@ -174,7 +168,6 @@ if st.session_state["estudiante_seleccionado"] is not None:
                 )
             except FileNotFoundError:
                 st.error("⚠️ La imagen base del certificado no se encontró. Asegúrate de subir 'WhatsApp Image 2026-09-08 at 8.12.21 AM.jpeg' a tu repositorio.")
-            # ------------------------------------------------
         else:
             st.info(f"Faltan {faltantes} horas para completar las 120h obligatorias.")
 
@@ -210,7 +203,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
 
     if not df_hist.empty:
         df_hist["fecha_dt"] = pd.to_datetime(df_hist["fecha"])
-        df_hist["dia"] = df_hist["fecha_dt"].dt.strftime('%Y-%m-%d')
+        df_hist["dia"] = df_hist["fecha_dt"].dt.strftime('%d/%m/%Y')
         
         df_por_dia = df_hist.groupby("dia")["horas"].sum().reset_index()
 
@@ -237,9 +230,6 @@ else:
     df = cargar_estudiantes()
 
     if not df.empty:
-        # =======================================================
-        # --- NUEVOS FILTROS EN LA BARRA LATERAL ---
-        # =======================================================
         st.sidebar.header("🔍 Filtros de Búsqueda")
         
         busqueda = st.sidebar.text_input("Buscar por Nombre, UID o Curso:")
@@ -250,27 +240,24 @@ else:
         estado_opciones = ["Todos", "En progreso (< 120h)", "Terminados / Con Certificado (120h)"]
         estado_seleccionado = st.sidebar.selectbox("Estado del Servicio:", estado_opciones)
         
-        filtro_fecha = st.sidebar.date_input("Filtrar por Última Fecha:", value=None)
+        # Formato ajustado a Día/Mes/Año (DD/MM/YYYY)
+        filtro_fecha = st.sidebar.date_input("Filtrar por Última Fecha:", value=None, format="DD/MM/YYYY")
 
-        # Aplicar filtro de curso
         if curso_seleccionado != "Todos":
             df = df[df["curso"] == curso_seleccionado]
 
-        # Aplicar filtro de estado (120 horas es el parámetro para el certificado)
         df["horas_num"] = pd.to_numeric(df["horas"], errors='coerce').fillna(0)
         if estado_seleccionado == "En progreso (< 120h)":
             df = df[df["horas_num"] < 120]
         elif estado_seleccionado == "Terminados / Con Certificado (120h)":
             df = df[df["horas_num"] >= 120]
 
-        # Aplicar filtro de fecha (busca coincidencias en el texto de ultimaFecha)
         if filtro_fecha is not None:
-            fecha_str = filtro_fecha.strftime("%d/%m/%Y") # Asume formato de fecha de Google Sheets
+            fecha_str = filtro_fecha.strftime("%d/%m/%Y")
             fecha_str_alt = filtro_fecha.strftime("%Y-%m-%d")
             df = df[df["ultimaFecha"].astype(str).str.contains(fecha_str, na=False) | 
                     df["ultimaFecha"].astype(str).str.contains(fecha_str_alt, na=False)]
 
-        # Aplicar búsqueda de texto libre
         if busqueda:
             df = df[
                 df["nombre"].str.contains(busqueda, case=False, na=False) |
@@ -284,9 +271,6 @@ else:
         prom = int(df["horas_num"].mean()) if len(df) > 0 else 0
         col3.metric("Promedio de Horas", f"{prom} hrs")
 
-        # =======================================================
-        # --- GENERACIÓN Y DESCARGA DE PDF CON TABLAS ---
-        # =======================================================
         st.divider()
         st.subheader("📑 Reporte General PDF")
         
@@ -300,21 +284,18 @@ else:
             pdf = FPDF(orientation='P', unit='mm', format='A4')
             pdf.add_page()
             
-            # Título y Marca de Tiempo
             pdf.set_font('Arial', 'B', 15)
             pdf.cell(0, 10, 'Reporte General de Horas Sociales (120h)', 0, 1, 'C')
             
-            fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
             pdf.set_font('Arial', 'I', 10)
             pdf.cell(0, 10, f'Generado el: {fecha_actual}', 0, 1, 'C')
             pdf.ln(5)
 
-            # Filtrar categorías
             terminaron = dataframe[dataframe['horas_num'] >= 120]
             faltantes = dataframe[(dataframe['horas_num'] > 0) & (dataframe['horas_num'] < 120)]
             empiezan = dataframe[dataframe['horas_num'] == 0]
 
-            # Función para dibujar TABLAS en el PDF
             def agregar_seccion_tabla(titulo, datos):
                 pdf.set_font('Arial', 'B', 12)
                 pdf.cell(0, 10, f'{titulo} (Total: {len(datos)} estudiantes)', 0, 1, 'L')
@@ -323,7 +304,6 @@ else:
                     pdf.set_font('Arial', '', 10)
                     pdf.cell(0, 6, 'Ningun estudiante en esta categoria.', 0, 1, 'L')
                 else:
-                    # Encabezados de Tabla
                     pdf.set_font('Arial', 'B', 10)
                     pdf.set_fill_color(200, 220, 255)
                     pdf.cell(85, 8, 'Nombre', 1, 0, 'C', fill=True)
@@ -331,7 +311,6 @@ else:
                     pdf.cell(25, 8, 'Horas', 1, 0, 'C', fill=True)
                     pdf.cell(45, 8, 'Ultima Fecha', 1, 1, 'C', fill=True)
                     
-                    # Filas de la Tabla
                     pdf.set_font('Arial', '', 9)
                     for idx, row in datos.iterrows():
                         nombre = str(row.get('nombre', 'N/A'))[:38].encode('latin-1', 'replace').decode('latin-1')
@@ -345,24 +324,21 @@ else:
                         pdf.cell(45, 8, fecha, 1, 1, 'C')
                 pdf.ln(5)
 
-            # Agregar las 3 tablas solicitadas
             agregar_seccion_tabla('YA TERMINARON (120 hrs o mas)', terminaron)
             agregar_seccion_tabla('AUN FALTANTES (En progreso)', faltantes)
             agregar_seccion_tabla('RECIEN EMPIEZAN (0 hrs)', empiezan)
 
             return pdf.output(dest='S').encode('latin-1')
 
-        # Botón de descarga interactivo
         pdf_bytes = generar_pdf(df)
         if pdf_bytes:
-            fecha_str = datetime.now().strftime("%Y%m%d_%H%M")
+            fecha_str = datetime.now().strftime("%d%m%Y_%H%M")
             st.download_button(
                 label="📥 Descargar Reporte PDF de Estudiantes",
                 data=pdf_bytes,
                 file_name=f"Reporte_Horas_{fecha_str}.pdf",
                 mime="application/pdf"
             )
-        # =======================================================
         
         st.divider()
         st.subheader("📋 Lista de Estudiantes")
