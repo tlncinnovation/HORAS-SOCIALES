@@ -42,11 +42,11 @@ def obtener_fuente(tamano=28):
 # =========================================================
 # FUNCIONES PARA CARGAR DATOS DESDE GOOGLE SHEETS
 # =========================================================
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=5)
 def cargar_profesores():
     try:
         url = APPS_SCRIPT_URL + "?action=obtener_profesores"
-        res = requests.get(url)
+        res = requests.get(url, timeout=10)
         datos = res.json()
         if "profesores" in datos:
             return pd.DataFrame(datos["profesores"])
@@ -54,11 +54,11 @@ def cargar_profesores():
     except Exception:
         return pd.DataFrame()
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=5)
 def cargar_estudiantes():
     try:
         url = APPS_SCRIPT_URL + "?action=buscar_web&q="
-        res = requests.get(url)
+        res = requests.get(url, timeout=10)
         datos = res.json()
         if "resultados" in datos:
             return pd.DataFrame(datos["resultados"])
@@ -70,7 +70,7 @@ def cargar_estudiantes():
 def cargar_historial(uid):
     try:
         url = f"{APPS_SCRIPT_URL}?action=obtener_historial&uid={uid}"
-        res = requests.get(url)
+        res = requests.get(url, timeout=10)
         datos = res.json()
         if "historial" in datos:
             return pd.DataFrame(datos["historial"])
@@ -171,17 +171,14 @@ if st.session_state["estudiante_seleccionado"] is not None:
                 img = Image.open("Certificado.jpeg")
                 draw = ImageDraw.Draw(img)
                 
-                # Cargar fuente tipográfica escalada
                 font_cert = obtener_fuente(28)
 
-                # Coordenadas corregidas y alineadas con las líneas de puntos
                 pos_nombre = (480, 468) 
                 draw.text(pos_nombre, str(est['nombre']).upper(), fill="black", font=font_cert)
 
                 pos_curso = (1100, 525) 
                 draw.text(pos_curso, str(est['curso']).upper(), fill="black", font=font_cert)
 
-                # Generar vista previa e imagen descargable
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG")
                 img_bytes = buf.getvalue()
@@ -263,7 +260,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
         if st.button("🗑️ Eliminar Perfil Definitivamente", disabled=(confirmacion_texto != frase_requerida or not chk2)):
             try:
                 url_del = f"{APPS_SCRIPT_URL}?action=eliminar_estudiante&uid={est['uid']}"
-                requests.get(url_del)
+                requests.get(url_del, timeout=10)
                 st.success(f"El perfil de {est['nombre']} ha sido eliminado.")
                 st.session_state["estudiante_seleccionado"] = None
                 st.cache_data.clear()
@@ -277,6 +274,10 @@ if st.session_state["estudiante_seleccionado"] is not None:
 else:
     st.title("🎓 Sistema de Control de Horas Sociales (120h)")
     st.markdown("Consulta en tiempo real el avance de horas sociales de los estudiantes.")
+
+    if st.button("🔄 Actualizar Datos"):
+        st.cache_data.clear()
+        st.rerun()
 
     df = cargar_estudiantes()
 
