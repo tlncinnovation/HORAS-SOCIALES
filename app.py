@@ -65,15 +65,19 @@ def cargar_estudiantes():
         if lista:
             df = pd.DataFrame(lista)
             
-            # --- CORRECCIÓN: Normalizar el nombre de la columna del documento ---
-            # Busca las posibles formas en las que el Sheets envía "documento ti"
-            if "documento ti" in df.columns:
-                df["documento"] = df["documento ti"]
-            elif "documento_ti" in df.columns:
-                df["documento"] = df["documento_ti"]
-            elif "documentoti" in df.columns:
-                df["documento"] = df["documentoti"]
-            # --------------------------------------------------------------------
+            # --- NORMALIZACIÓN DE COLUMNAS ---
+            # Limpia espacios en blanco y pasa todo a minúsculas
+            df.columns = [str(c).strip().lower() for c in df.columns]
+            
+            # Búsqueda automática de la columna del documento
+            doc_col = None
+            for c in df.columns:
+                if "doc" in c or "ti" in c or "ident" in c or "cedula" in c:
+                    doc_col = c
+                    break
+            
+            if doc_col:
+                df["documento"] = df[doc_col]
             
             cols_obligatorias = ["nombre", "uid", "curso", "horas", "ultimaFecha", "correo", "documento"]
             for col in cols_obligatorias:
@@ -155,7 +159,6 @@ if st.sidebar.button("🚪 Cerrar Sesión"):
 
 st.sidebar.divider()
 
-# --- FORMULARIO DIRECTO EN WEB PARA REGISTRAR TARJETAS ---
 with st.sidebar.expander("➕ Registrar Nueva Tarjeta / Estudiante"):
     with st.form("form_registro_tarjeta"):
         nuevo_uid = st.text_input("UID Tarjeta (RFID):").strip().upper()
@@ -202,8 +205,19 @@ if st.session_state["estudiante_seleccionado"] is not None:
         st.session_state["estudiante_seleccionado"] = None
         st.rerun()
 
+    # Extracción dinámica del documento
+    doc_ti = "N/A"
+    for k, v in est.items():
+        k_clean = str(k).lower().strip()
+        v_clean = str(v).strip()
+        if ("doc" in k_clean or "ti" in k_clean or "ident" in k_clean) and v_clean and v_clean.upper() != "N/A":
+            doc_ti = v_clean
+            break
+    if doc_ti == "N/A":
+        doc_ti = str(est.get("documento", "N/A"))
+
     st.title(f"👤 {est['nombre']}")
-    st.subheader(f"Curso: {est['curso']} | Doc. TI: `{est.get('documento', 'N/A')}` | UID: `{est['uid']}`")
+    st.subheader(f"Curso: {est['curso']} | Doc. TI: `{doc_ti}` | UID: `{est['uid']}`")
     st.caption(f"📧 Correo Electrónico: {est.get('correo', 'Sin correo registrado')}")
     st.divider()
 
@@ -231,10 +245,6 @@ if st.session_state["estudiante_seleccionado"] is not None:
                 draw.text((480, 468), str(est['nombre']).upper(), fill="black", font=font_cert)
                 
                 # Documento TI
-                doc_ti = str(est.get('documento', ''))
-                # Verificación extra en caso de que esté guardado directamente como 'documento ti' en el dict
-                if doc_ti == "N/A" and "documento ti" in est:
-                    doc_ti = str(est["documento ti"])
                 draw.text((700, 525), doc_ti, fill="black", font=font_cert) 
                 
                 # Curso
@@ -468,7 +478,16 @@ else:
             curso = row["curso"]
             horas = int(row["horas_num"])
             porcentaje = min(100, int((horas / 120) * 100))
-            doc = row.get("documento", "N/A")
+            
+            # Búsqueda dinámica del documento para la tarjeta
+            doc = "N/A"
+            for k, v in row.items():
+                k_clean = str(k).lower().strip()
+                v_clean = str(v).strip()
+                if ("doc" in k_clean or "ti" in k_clean or "ident" in k_clean) and v_clean and v_clean.upper() != "N/A":
+                    doc = v_clean
+                    break
+
             correo = row.get("correo", "N/A")
             
             with st.container():
