@@ -11,7 +11,6 @@ st.set_page_config(
     page_title="Control de Horas Sociales", page_icon="🎓", layout="wide"
 )
 
-# ⚠️ ¡VERIFICA QUE ESTE ENLACE SEA EL ACTUAL DEL DEPLOYMENT!
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_fdhEzpVo861lJwPzsS-Nosl6MjCoNFOMLz4y3letpSmK12V8t_qq8XC_A1oO3g0/exec"
 
 def formatear_uid(uid):
@@ -44,7 +43,7 @@ def cargar_profesores():
         try:
             datos = res.json()
         except Exception:
-            st.error(f"🚨 Error Profesores: Apps Script no devolvió datos válidos. Revisa permisos. Google dice: {res.text[:100]}")
+            st.error(f"🚨 Error Profesores: Apps Script no devolvió datos válidos. Google dice: {res.text[:100]}")
             return pd.DataFrame()
             
         return pd.DataFrame(datos["profesores"]) if "profesores" in datos else pd.DataFrame()
@@ -61,8 +60,7 @@ def cargar_estudiantes():
         try:
             datos = res.json()
         except Exception:
-            # Aquí saltará la alerta si Google manda HTML (página de login) en lugar del JSON
-            st.error(f"🚨 Error Estudiantes: Revisa si la URL cambió o si está en 'Cualquier persona'. Google respondió: {res.text[:100]}")
+            st.error(f"🚨 Error Estudiantes: Apps Script no devolvió JSON. Respuesta: {res.text[:100]}")
             return pd.DataFrame()
 
         lista = datos.get("estudiantes") or datos.get("resultados") or []
@@ -97,7 +95,7 @@ def cargar_historial(uid):
         try:
             datos = res.json()
         except Exception:
-            st.error(f"🚨 Error Historial: Google no devolvió datos válidos. Respuesta: {res.text[:100]}")
+            st.error(f"🚨 Error Historial: Respuesta inválida. {res.text[:100]}")
             return pd.DataFrame()
             
         if "historial" in datos and len(datos["historial"]) > 0:
@@ -367,16 +365,28 @@ else:
     df = cargar_estudiantes()
 
     if not df.empty:
+        # AQUÍ ESTÁN TUS FILTROS DE VUELTA
         st.sidebar.header("🔍 Filtros de Búsqueda")
         busqueda = st.sidebar.text_input("Buscar Estudiante / Documento:")
+        
         cursos_disponibles = ["Todos"] + sorted(list(df["curso"].astype(str).unique()))
         curso_sel = st.sidebar.selectbox("Filtrar por Curso:", cursos_disponibles)
-
-        if curso_sel != "Todos":
-            df = df[df["curso"] == curso_sel]
+        
+        estado_sel = st.sidebar.selectbox("Filtrar por Progreso:", ["Todos", "Ya terminaron (120h+)", "En proceso (Menos de 120h)"])
 
         df["horas_num"] = pd.to_numeric(df["horas"], errors="coerce").fillna(0)
 
+        # Aplicar filtro de curso
+        if curso_sel != "Todos":
+            df = df[df["curso"] == curso_sel]
+
+        # Aplicar filtro de estado (Las 120 horas)
+        if estado_sel == "Ya terminaron (120h+)":
+            df = df[df["horas_num"] >= 120]
+        elif estado_sel == "En proceso (Menos de 120h)":
+            df = df[df["horas_num"] < 120]
+
+        # Aplicar barra de búsqueda
         if busqueda:
             df = df[
                 df["nombre"].astype(str).str.contains(busqueda, case=False, na=False)
