@@ -18,7 +18,7 @@ st.set_page_config(
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_fdhEzpVo861lJwPzsS-Nosl6MjCoNFOMLz4y3letpSmK12V8t_qq8XC_A1oO3g0/exec"
 
 # =========================================================
-# FUNCIÓN AUXILIAR PARA CÁLCULO Y CARGA DE FUENTES
+# FUNCIÓN AUXILIAR PARA FUENTES DE CERTIFICADO
 # =========================================================
 def obtener_fuente(tamano=28):
     rutas_fuentes = [
@@ -40,7 +40,7 @@ def obtener_fuente(tamano=28):
         return ImageFont.load_default()
 
 # =========================================================
-# FUNCIONES PARA CARGAR DATOS DESDE GOOGLE SHEETS
+# FUNCIONES DE CARGA DE DATOS
 # =========================================================
 @st.cache_data(ttl=5)
 def cargar_profesores():
@@ -57,20 +57,17 @@ def cargar_profesores():
 @st.cache_data(ttl=5)
 def cargar_estudiantes():
     try:
-        # Pide estudiantes con la acción compatible
         url = APPS_SCRIPT_URL + "?action=obtener_estudiantes"
         res = requests.get(url, timeout=10)
         datos = res.json()
-        
-        # Soporta tanto 'estudiantes' como 'resultados' por compatibilidad
         lista = datos.get("estudiantes") or datos.get("resultados") or []
         
         if lista:
             df = pd.DataFrame(lista)
-            # Asegura que existan las columnas clave para evitar errores en Pandas
-            for col in ["nombre", "uid", "curso", "horas", "ultimaFecha"]:
+            cols_obligatorias = ["nombre", "uid", "curso", "horas", "ultimaFecha", "correo", "documento"]
+            for col in cols_obligatorias:
                 if col not in df.columns:
-                    df[col] = "N/A" if col in ["curso", "ultimaFecha"] else (0 if col == "horas" else "")
+                    df[col] = "N/A" if col not in ["horas"] else 0
             return df
         return pd.DataFrame()
     except Exception as e:
@@ -90,7 +87,7 @@ def cargar_historial(uid):
         return pd.DataFrame()
 
 # =========================================================
-# MANEJO DE SESIÓN Y AUTENTICACIÓN
+# INICIO DE SESIÓN
 # =========================================================
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
@@ -117,7 +114,6 @@ def login():
             if not df_profes.empty:
                 prof_data = df_profes[df_profes["nombre"] == profesor_sel]
                 if not prof_data.empty:
-                    # Soporta las dos claves posibles devueltas por Apps Script
                     pass_correcta = str(prof_data.iloc[0].get("password") or prof_data.iloc[0].get("contrasena") or "").strip()
                     if str(password).strip() == pass_correcta:
                         es_valido = True
@@ -138,13 +134,49 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # =========================================================
-# MENÚ LATERAL Y SESIÓN
+# MENÚ LATERAL Y REGISTRO DE TARJETAS
 # =========================================================
 st.sidebar.markdown(f"👨‍🏫 **Profesor:** {st.session_state['usuario_actual']}")
 if st.sidebar.button("🚪 Cerrar Sesión"):
     st.session_state["autenticado"] = False
     st.session_state["estudiante_seleccionado"] = None
     st.rerun()
+
+st.sidebar.divider()
+
+# --- FORMULARIO DIRECTO EN WEB PARA REGISTRAR TARJETAS ---
+with st.sidebar.expander("➕ Registrar Nueva Tarjeta / Estudiante"):
+    with st.form("form_registro_tarjeta"):
+        nuevo_uid = st.text_input("UID Tarjeta (RFID):").strip().upper()
+        nuevo_nombre = st.text_input("Nombre Completo:")
+        nuevo_doc = st.text_input("Documento (TI / Cédula):")
+        nuevo_correo = st.text_input("Correo Electrónico:")
+        nuevo_curso = st.text_input("Curso (ej: 901, 1001):").strip()
+        horas_ini = st.number_input("Horas Iniciales:", min_value=0, value=0)
+        
+        btn_reg = st.form_submit_button("💾 Guardar Estudiante")
+        
+        if btn_reg:
+            if not nuevo_uid or not nuevo_nombre or not nuevo_curso:
+                st.error("⚠️ El UID, Nombre y Curso son obligatorios.")
+            else:
+                url_reg = (
+                    f"{APPS_SCRIPT_URL}?action=registrar_estudiante"
+                    f"&uid={nuevo_uid}&nombre={nuevo_nombre}"
+                    f"&documento={nuevo_doc}&correo={nuevo_correo}"
+                    f"&curso={nuevo_curso}&horas={horas_ini}"
+                    f"&profe={st.session_state['usuario_actual']}"
+                )
+                try:
+                    res = requests.get(url_reg, timeout=10)
+                    if res.status_code == 200:
+                        st.success(f"¡{nuevo_nombre} registrado correctamente!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.error("Error al registrar en Google Sheets.")
+                except Exception as ex:
+                    st.error(f"Error de conexión: {ex}")
 
 if "estudiante_seleccionado" not in st.session_state:
     st.session_state["estudiante_seleccionado"] = None
@@ -160,7 +192,8 @@ if st.session_state["estudiante_seleccionado"] is not None:
         st.rerun()
 
     st.title(f"👤 {est['nombre']}")
-    st.subheader(f"Curso: {est['curso']} | UID: `{est['uid']}`")
+    st.subheader(f"Curso: {est['curso']} | Doc. TI: `{est.get('documento', 'N/A')}` | UID: `{est['uid']}`")
+    st.caption(f"📧 Correo Electrónico: {est.get('correo', 'Sin correo registrado')}")
     st.divider()
 
     horas_actuales = int(pd.to_numeric(est.get("horas", 0), errors="coerce"))
@@ -176,26 +209,20 @@ if st.session_state["estudiante_seleccionado"] is not None:
         
         if horas_actuales >= 120:
             st.success("🎉 ¡Meta Alcanzada! Estudiante Apto para Graduación.")
-            
             st.markdown("### 📜 Certificado de Servicio Social")
             try:
                 img = Image.open("Certificado.jpeg")
                 draw = ImageDraw.Draw(img)
-                
                 font_cert = obtener_fuente(28)
 
-                pos_nombre = (480, 468) 
-                draw.text(pos_nombre, str(est['nombre']).upper(), fill="black", font=font_cert)
-
-                pos_curso = (1100, 525) 
-                draw.text(pos_curso, str(est['curso']).upper(), fill="black", font=font_cert)
+                draw.text((480, 468), str(est['nombre']).upper(), fill="black", font=font_cert)
+                draw.text((1100, 525), str(est['curso']).upper(), fill="black", font=font_cert)
 
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG")
                 img_bytes = buf.getvalue()
 
                 st.image(img_bytes, caption="Vista previa del Certificado", use_container_width=True)
-
                 st.download_button(
                     label="📥 Descargar Certificado (Imagen)",
                     data=img_bytes,
@@ -203,7 +230,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
                     mime="image/jpeg"
                 )
             except FileNotFoundError:
-                st.error("⚠️ La imagen del certificado no se encontró. Verifica que 'Certificado.jpeg' esté en la misma carpeta.")
+                st.error("⚠️ La imagen 'Certificado.jpeg' no está en la carpeta del servidor.")
         else:
             st.info(f"Faltan {faltantes} horas para completar las 120h obligatorias.")
 
@@ -253,23 +280,17 @@ if st.session_state["estudiante_seleccionado"] is not None:
     else:
         st.warning("Este estudiante aún no tiene registros detallados en el Historial.")
 
-    # ---------------------------------------------------------
-    # ELIMINACIÓN DE PERFIL CON TRIPLE CONFIRMACIÓN
-    # ---------------------------------------------------------
+    # ELIMINACIÓN DE PERFIL
     st.divider()
     with st.expander("⚠️ Zona de Peligro: Eliminar Perfil del Estudiante"):
-        st.warning("Usa esta opción únicamente cuando el estudiante se haya graduado de 11° y tenga su certificado impreso.")
-        
+        st.warning("Usa esta opción únicamente cuando el estudiante se haya graduado y tenga su certificado.")
         chk1 = st.checkbox("1. Confirmo que deseo iniciar el proceso de eliminación.")
-        chk2 = st.checkbox("2. Entiendo que esta acción borrará permanentemente todo el historial de horas.", disabled=not chk1)
+        chk2 = st.checkbox("2. Entiendo que esta acción borrará permanentemente todo el historial.", disabled=not chk1)
         
-        frase_requerida = f"BORRAR {est['nombre']}"
-        confirmacion_texto = st.text_input(
-            f"3. Escribe exactamente '{frase_requerida}' para habilitar el borrado:", 
-            disabled=not chk2
-        )
+        frase_req = f"BORRAR {est['nombre']}"
+        confirm_txt = st.text_input(f"3. Escribe exactamente '{frase_req}' para habilitar el borrado:", disabled=not chk2)
         
-        if st.button("🗑️ Eliminar Perfil Definitivamente", disabled=(confirmacion_texto != frase_requerida or not chk2)):
+        if st.button("🗑️ Eliminar Perfil Definitivamente", disabled=(confirm_txt != frase_req or not chk2)):
             try:
                 url_del = f"{APPS_SCRIPT_URL}?action=eliminar_estudiante&uid={est['uid']}"
                 requests.get(url_del, timeout=10)
@@ -278,7 +299,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
                 st.cache_data.clear()
                 st.rerun()
             except Exception as ex:
-                st.error(f"Error al conectar con la base de datos: {ex}")
+                st.error(f"Error al borrar: {ex}")
 
 # =========================================================
 # VISTA 1: LISTA GENERAL DE ESTUDIANTES
@@ -295,34 +316,28 @@ else:
 
     if not df.empty:
         st.sidebar.header("🔍 Filtros de Búsqueda")
-        busqueda = st.sidebar.text_input("Buscar por Nombre, UID o Curso:")
+        busqueda = st.sidebar.text_input("Buscar por Nombre, UID, TI o Curso:")
         cursos_disponibles = ["Todos"] + sorted(list(df["curso"].astype(str).unique()))
-        curso_seleccionado = st.sidebar.selectbox("Filtrar por Curso:", cursos_disponibles)
+        curso_sel = st.sidebar.selectbox("Filtrar por Curso:", cursos_disponibles)
         
         estado_opciones = ["Todos", "En progreso (< 120h)", "Terminados / Con Certificado (120h)"]
-        estado_seleccionado = st.sidebar.selectbox("Estado del Servicio:", estado_opciones)
-        filtro_fecha = st.sidebar.date_input("Filtrar por Última Fecha:", value=None, format="DD/MM/YYYY")
+        estado_sel = st.sidebar.selectbox("Estado del Servicio:", estado_opciones)
 
-        if curso_seleccionado != "Todos":
-            df = df[df["curso"] == curso_seleccionado]
+        if curso_sel != "Todos":
+            df = df[df["curso"] == curso_sel]
 
         df["horas_num"] = pd.to_numeric(df["horas"], errors='coerce').fillna(0)
-        if estado_seleccionado == "En progreso (< 120h)":
+        if estado_sel == "En progreso (< 120h)":
             df = df[df["horas_num"] < 120]
-        elif estado_seleccionado == "Terminados / Con Certificado (120h)":
+        elif estado_sel == "Terminados / Con Certificado (120h)":
             df = df[df["horas_num"] >= 120]
-
-        if filtro_fecha is not None and "ultimaFecha" in df.columns:
-            fecha_str = filtro_fecha.strftime("%d/%m/%Y")
-            fecha_str_alt = filtro_fecha.strftime("%Y-%m-%d")
-            df = df[df["ultimaFecha"].astype(str).str.contains(fecha_str, na=False) | 
-                    df["ultimaFecha"].astype(str).str.contains(fecha_str_alt, na=False)]
 
         if busqueda:
             df = df[
                 df["nombre"].astype(str).str.contains(busqueda, case=False, na=False) |
                 df["uid"].astype(str).str.contains(busqueda, case=False, na=False) |
-                df["curso"].astype(str).str.contains(busqueda, case=False, na=False)
+                df["curso"].astype(str).str.contains(busqueda, case=False, na=False) |
+                df["documento"].astype(str).str.contains(busqueda, case=False, na=False)
             ]
 
         col1, col2, col3 = st.columns(3)
@@ -338,55 +353,58 @@ else:
             try:
                 from fpdf import FPDF
             except ImportError:
-                st.error("⚠️ Falta instalar fpdf. Ejecuta 'pip install fpdf2' en tu terminal.")
+                st.error("⚠️ Falta instalar fpdf. Ejecuta 'pip install fpdf2' en tu entorno.")
                 return None
 
             pdf = FPDF(orientation='P', unit='mm', format='A4')
             pdf.add_page()
             
-            pdf.set_font('Arial', 'B', 15)
+            pdf.set_font('Arial', 'B', 14)
             pdf.cell(0, 10, 'Reporte General de Horas Sociales (120h)', 0, 1, 'C')
             
-            fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            pdf.set_font('Arial', 'I', 10)
-            pdf.cell(0, 10, f'Generado el: {fecha_actual}', 0, 1, 'C')
-            pdf.ln(5)
+            fecha_act = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            pdf.set_font('Arial', 'I', 9)
+            pdf.cell(0, 8, f'Generado el: {fecha_act}', 0, 1, 'C')
+            pdf.ln(4)
+
+            def agregar_seccion_tabla(titulo, datos):
+                pdf.set_font('Arial', 'B', 11)
+                pdf.cell(0, 8, f'{titulo} (Total: {len(datos)})', 0, 1, 'L')
+                
+                if datos.empty:
+                    pdf.set_font('Arial', '', 9)
+                    pdf.cell(0, 6, 'Ningun estudiante en esta categoria.', 0, 1, 'L')
+                else:
+                    pdf.set_font('Arial', 'B', 9)
+                    pdf.set_fill_color(210, 225, 250)
+                    pdf.cell(65, 7, 'Nombre', 1, 0, 'C', fill=True)
+                    pdf.cell(30, 7, 'Doc. TI', 1, 0, 'C', fill=True)
+                    pdf.cell(20, 7, 'Curso', 1, 0, 'C', fill=True)
+                    pdf.cell(20, 7, 'Horas', 1, 0, 'C', fill=True)
+                    pdf.cell(55, 7, 'Correo', 1, 1, 'C', fill=True)
+                    
+                    pdf.set_font('Arial', '', 8)
+                    for idx, row in datos.iterrows():
+                        nom = str(row.get('nombre', 'N/A'))[:30].encode('latin-1', 'replace').decode('latin-1')
+                        doc = str(row.get('documento', 'N/A'))[:14].encode('latin-1', 'replace').decode('latin-1')
+                        cur = str(row.get('curso', 'N/A'))[:8].encode('latin-1', 'replace').decode('latin-1')
+                        hrs = str(int(row.get('horas_num', 0)))
+                        em = str(row.get('correo', 'N/A'))[:25].encode('latin-1', 'replace').decode('latin-1')
+                        
+                        pdf.cell(65, 7, nom, 1, 0, 'L')
+                        pdf.cell(30, 7, doc, 1, 0, 'C')
+                        pdf.cell(20, 7, cur, 1, 0, 'C')
+                        pdf.cell(20, 7, hrs, 1, 0, 'C')
+                        pdf.cell(55, 7, em, 1, 1, 'L')
+                pdf.ln(4)
 
             terminaron = dataframe[dataframe['horas_num'] >= 120]
             faltantes = dataframe[(dataframe['horas_num'] > 0) & (dataframe['horas_num'] < 120)]
             empiezan = dataframe[dataframe['horas_num'] == 0]
 
-            def agregar_seccion_tabla(titulo, datos):
-                pdf.set_font('Arial', 'B', 12)
-                pdf.cell(0, 10, f'{titulo} (Total: {len(datos)} estudiantes)', 0, 1, 'L')
-                
-                if datos.empty:
-                    pdf.set_font('Arial', '', 10)
-                    pdf.cell(0, 6, 'Ningun estudiante en esta categoria.', 0, 1, 'L')
-                else:
-                    pdf.set_font('Arial', 'B', 10)
-                    pdf.set_fill_color(200, 220, 255)
-                    pdf.cell(85, 8, 'Nombre', 1, 0, 'C', fill=True)
-                    pdf.cell(30, 8, 'Curso', 1, 0, 'C', fill=True)
-                    pdf.cell(25, 8, 'Horas', 1, 0, 'C', fill=True)
-                    pdf.cell(45, 8, 'Ultima Fecha', 1, 1, 'C', fill=True)
-                    
-                    pdf.set_font('Arial', '', 9)
-                    for idx, row in datos.iterrows():
-                        nombre = str(row.get('nombre', 'N/A'))[:38].encode('latin-1', 'replace').decode('latin-1')
-                        curso = str(row.get('curso', 'N/A'))[:10].encode('latin-1', 'replace').decode('latin-1')
-                        horas = str(int(row.get('horas_num', 0)))
-                        fecha = str(row.get('ultimaFecha', 'N/A'))[:20].encode('latin-1', 'replace').decode('latin-1')
-                        
-                        pdf.cell(85, 8, nombre, 1, 0, 'L')
-                        pdf.cell(30, 8, curso, 1, 0, 'C')
-                        pdf.cell(25, 8, horas, 1, 0, 'C')
-                        pdf.cell(45, 8, fecha, 1, 1, 'C')
-                pdf.ln(5)
-
-            agregar_seccion_tabla('YA TERMINARON (120 hrs o mas)', terminaron)
-            agregar_seccion_tabla('AUN FALTANTES (En progreso)', faltantes)
-            agregar_seccion_tabla('RECIEN EMPIEZAN (0 hrs)', empiezan)
+            agregar_seccion_tabla('COMPLETARON (120 hrs o mas)', terminaron)
+            agregar_seccion_tabla('EN PROGRESO', faltantes)
+            agregar_seccion_tabla('SIN REGISTROS (0 hrs)', empiezan)
 
             return pdf.output(dest='S').encode('latin-1')
 
@@ -394,7 +412,7 @@ else:
         if pdf_bytes:
             fecha_str = datetime.now().strftime("%d%m%Y_%H%M")
             st.download_button(
-                label="📥 Descargar Reporte PDF de Estudiantes",
+                label="📥 Descargar Reporte PDF Completo",
                 data=pdf_bytes,
                 file_name=f"Reporte_Horas_{fecha_str}.pdf",
                 mime="application/pdf"
@@ -408,14 +426,17 @@ else:
             curso = row["curso"]
             horas = int(row["horas_num"])
             porcentaje = min(100, int((horas / 120) * 100))
+            doc = row.get("documento", "N/A")
+            correo = row.get("correo", "N/A")
             
             with st.container():
                 col_info, col_btn = st.columns([4, 1])
                 
                 with col_info:
                     st.markdown(f"### {nombre} `Curso: {curso}`")
+                    st.caption(f"🆔 **TI:** {doc} | 📧 **Correo:** {correo}")
                     st.progress(porcentaje / 100)
-                    st.caption(f"**{horas}** / 120 hrs ({porcentaje}%) | ÚLTIMA MARCA: {row.get('ultimaFecha', 'N/A')}")
+                    st.caption(f"**{horas}** / 120 hrs ({porcentaje}%) | ÚLTIMA FECHA: {row.get('ultimaFecha', 'N/A')}")
                 
                 with col_btn:
                     st.write("") 
