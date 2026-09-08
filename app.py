@@ -18,6 +18,28 @@ st.set_page_config(
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_fdhEzpVo861lJwPzsS-Nosl6MjCoNFOMLz4y3letpSmK12V8t_qq8XC_A1oO3g0/exec"
 
 # =========================================================
+# FUNCIÓN AUXILIAR PARA CÁLCULO Y CARGA DE FUENTES
+# =========================================================
+def obtener_fuente(tamano=28):
+    rutas_fuentes = [
+        "arial.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/calibri.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/Library/Fonts/Arial.ttf"
+    ]
+    for ruta in rutas_fuentes:
+        try:
+            return ImageFont.truetype(ruta, tamano)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default(size=tamano)
+    except Exception:
+        return ImageFont.load_default()
+
+# =========================================================
 # FUNCIONES PARA CARGAR DATOS DESDE GOOGLE SHEETS
 # =========================================================
 @st.cache_data(ttl=300)
@@ -146,28 +168,25 @@ if st.session_state["estudiante_seleccionado"] is not None:
             
             st.markdown("### 📜 Certificado de Servicio Social")
             try:
-                # Nombre del archivo actualizado
-                img_path = "Certificado.jpeg"
-                img = Image.open(img_path)
+                img = Image.open("Certificado.jpeg")
                 draw = ImageDraw.Draw(img)
                 
-                try:
-                    font = ImageFont.truetype("arial.ttf", 32)
-                except Exception:
-                    font = ImageFont.load_default()
+                # Cargar fuente tipográfica escalada
+                font_cert = obtener_fuente(28)
 
-                # 1. Nombre del estudiante (frente a 'Que el (la) joven:')
-                pos_nombre = (430, 465) 
-                draw.text(pos_nombre, str(est['nombre']).upper(), fill="black", font=font)
+                # Coordenadas corregidas y alineadas con las líneas de puntos
+                pos_nombre = (480, 468) 
+                draw.text(pos_nombre, str(est['nombre']).upper(), fill="black", font=font_cert)
 
-                # 2. Curso del estudiante (frente a 'del grado')
-                pos_curso = (1120, 520) 
-                draw.text(pos_curso, str(est['curso']).upper(), fill="black", font=font)
+                pos_curso = (1100, 525) 
+                draw.text(pos_curso, str(est['curso']).upper(), fill="black", font=font_cert)
 
-                # Convertir a buffer de imagen
+                # Generar vista previa e imagen descargable
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG")
                 img_bytes = buf.getvalue()
+
+                st.image(img_bytes, caption="Vista previa del Certificado", use_container_width=True)
 
                 st.download_button(
                     label="📥 Descargar Certificado (Imagen)",
@@ -176,7 +195,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
                     mime="image/jpeg"
                 )
             except FileNotFoundError:
-                st.error("⚠️ La imagen del certificado no se encontró. Verifica que el archivo 'Certificado.jpeg' esté en la misma carpeta que este script.")
+                st.error("⚠️ La imagen del certificado no se encontró. Verifica que 'Certificado.jpeg' esté en la misma carpeta.")
         else:
             st.info(f"Faltan {faltantes} horas para completar las 120h obligatorias.")
 
