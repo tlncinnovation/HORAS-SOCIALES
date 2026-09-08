@@ -41,27 +41,9 @@ def obtener_fuente(tamano=28):
 def cargar_profesores():
     try:
         res = requests.get(APPS_SCRIPT_URL + "?action=obtener_profesores", timeout=15)
-        try:
-            datos = res.json()
-        except Exception:
-            return pd.DataFrame()
-            
-        if "profesores" in datos:
+        datos = res.json()
+        if "profesores" in datos and len(datos["profesores"]) > 0:
             df = pd.DataFrame(datos["profesores"])
-            if not df.empty:
-                # 1. Pasamos todo a minúsculas
-                df.columns = [str(c).strip().lower() for c in df.columns]
-                
-                # 2. Si la columna se llama "nombre del tacher", la renombramos internamente a "nombre"
-                col_nombre = next((c for c in df.columns if "nombre" in c), None)
-                if col_nombre:
-                    df["nombre"] = df[col_nombre]
-                    
-                # 3. Si dice "contraseña" (con ñ), la renombramos a "password" para que Python no pelee
-                col_pass = next((c for c in df.columns if "contra" in c or "pass" in c), None)
-                if col_pass:
-                    df["password"] = df[col_pass]
-                    
             return df
         return pd.DataFrame()
     except Exception:
@@ -141,7 +123,7 @@ def login():
 
         if btn_submit:
             es_valido = False
-            # Blindaje extra para que no explote si la columna no existe
+            
             if not df_profes.empty and "nombre" in df_profes.columns:
                 prof_data = df_profes[df_profes["nombre"] == profesor_sel]
                 if not prof_data.empty:
@@ -153,14 +135,14 @@ def login():
                     if str(password).strip() == pass_correcta:
                         es_valido = True
 
-            # Si es admin siempre entra
+            # Clave de respaldo para Administrador
             if password == "admin123":
                 es_valido = True
 
             if es_valido:
                 st.session_state["autenticado"] = True
                 st.session_state["usuario_actual"] = profesor_sel if profesor_sel else "Administrador"
-                st.success(f"¡Bienvenido(a)!")
+                st.success("¡Bienvenido(a)!")
                 st.rerun()
             else:
                 st.error("❌ Contraseña incorrecta o usuario no encontrado.")
