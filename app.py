@@ -281,7 +281,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
                     font_cert = obtener_fuente(28)
 
                     draw.text(
-                        (180, 168),
+                        (480, 468),
                         str(est["nombre"]).upper(),
                         fill="black",
                         font=font_cert,
@@ -355,62 +355,42 @@ if st.session_state["estudiante_seleccionado"] is not None:
     st.divider()
 
     # =========================================================
-    # SECCIÓN DE HISTORIAL Y GRÁFICA DETALLADA
+    # HISTORIAL DE REGISTROS Y GRÁFICA DE ASISTENCIA
     # =========================================================
     st.subheader("📊 Historial de Registros y Gráfica de Asistencia")
     df_hist = cargar_historial(est["uid"])
 
     if not df_hist.empty:
-        df_hist_norm = df_hist.copy()
-        df_hist_norm.columns = [
-            str(c).strip().lower() for c in df_hist_norm.columns
-        ]
+        df_h = df_hist.copy()
+        df_h.columns = [str(c).strip().lower() for c in df_h.columns]
 
         col_fecha = next(
-            (
-                c
-                for c in df_hist_norm.columns
-                if "fecha" in c or "date" in c or "time" in c
-            ),
-            None,
+            (c for c in df_h.columns if "fecha" in c or "date" in c), None
         )
-        col_horas = next(
-            (c for c in df_hist_norm.columns if "hora" in c), None
-        )
+        col_horas = next((c for c in df_h.columns if "hora" in c), None)
 
         if col_fecha and col_horas:
-            df_hist_norm["horas_num"] = pd.to_numeric(
-                df_hist_norm[col_horas], errors="coerce"
+            df_h["horas_num"] = pd.to_numeric(
+                df_h[col_horas], errors="coerce"
             ).fillna(0)
-            df_hist_norm["fecha_dt"] = pd.to_datetime(
-                df_hist_norm[col_fecha], dayfirst=True, errors="coerce"
+            df_h["fecha_dt"] = pd.to_datetime(
+                df_h[col_fecha], dayfirst=True, errors="coerce"
             )
-            df_hist_norm["dia"] = df_hist_norm["fecha_dt"].dt.strftime(
-                "%d/%m/%Y"
+            df_h["dia"] = df_h["fecha_dt"].dt.strftime("%d/%m/%Y").fillna(
+                df_h[col_fecha].astype(str)
             )
 
-            df_por_dia = df_hist_norm.groupby("dia", as_index=False)[
-                "horas_num"
-            ].sum()
+            df_agrupado = df_h.groupby("dia", as_index=False)["horas_num"].sum()
 
             st.markdown("### 📈 Horas Registradas por Día")
-            st.bar_chart(data=df_por_dia, x="dia", y="horas_num")
+            st.bar_chart(data=df_agrupado, x="dia", y="horas_num")
 
-        st.markdown("### 📋 Tabla de Asistencia Registrada")
+        st.markdown("### 📋 Tabla de Asistencia Detallada")
         st.dataframe(df_hist, use_container_width=True)
     else:
         st.warning(
             "Este estudiante aún no tiene registros asociados en la pestaña 'Historial'."
         )
-        with st.expander("🔍 Diagnóstico de Búsqueda"):
-            st.write(f"**UID consultado:** `{formatear_uid(est['uid'])}`")
-            st.write(
-                "Si en tu Google Sheet sí tienes datos para este estudiante en la pestaña **Historial**, comprueba:"
-            )
-            st.write("1. Que el UID impreso arriba coincida con el de la hoja.")
-            st.write(
-                "2. Que hayas hecho clic en **Implementar > Nueva versión** en Google Apps Script."
-            )
 
     st.divider()
     with st.expander("⚠️ Zona de Peligro: Eliminar Perfil del Estudiante"):
