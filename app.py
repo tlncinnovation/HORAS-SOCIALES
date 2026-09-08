@@ -281,7 +281,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
                     font_cert = obtener_fuente(28)
 
                     draw.text(
-                        (180, 468),
+                        (180, 168),
                         str(est["nombre"]).upper(),
                         fill="black",
                         font=font_cert,
