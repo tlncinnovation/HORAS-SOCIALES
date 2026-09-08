@@ -215,8 +215,20 @@ if st.session_state["estudiante_seleccionado"] is not None:
                 draw = ImageDraw.Draw(img)
                 font_cert = obtener_fuente(28)
 
+                # --- DATOS DEL CERTIFICADO ---
+                # Nombre
                 draw.text((480, 468), str(est['nombre']).upper(), fill="black", font=font_cert)
+                
+                # Documento TI (Ubicado en la misma línea del curso, pero antes)
+                doc_ti = str(est.get('documento', ''))
+                draw.text((700, 525), doc_ti, fill="black", font=font_cert) 
+                
+                # Curso
                 draw.text((1100, 525), str(est['curso']).upper(), fill="black", font=font_cert)
+                
+                # Jornada (U)
+                draw.text((380, 580), "U", fill="black", font=font_cert) 
+                # -----------------------------
 
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG")
