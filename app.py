@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import altair as alt
+from datetime import datetime
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -16,7 +17,6 @@ APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_fdhEzpVo861lJwPzsS
 @st.cache_data(ttl=5)
 def cargar_profesores():
     try:
-        # Pide a Apps Script la lista de profesores registrada
         url = APPS_SCRIPT_URL + "?action=obtener_profesores"
         res = requests.get(url)
         datos = res.json()
@@ -61,25 +61,20 @@ def login():
     st.title("🔒 Acceso al Sistema de Horas Sociales")
     st.subheader("Autenticación de Profesores")
     
-    # Carga la lista de profesores desde Google Sheets
     df_profes = cargar_profesores()
     
     with st.form("form_login"):
         if not df_profes.empty and "nombre" in df_profes.columns:
-            # Dropdown con nombres de profesores
             profesor_sel = st.selectbox("Selecciona tu nombre:", df_profes["nombre"].tolist())
         else:
-            # Si no hay lista o no la cargó, permite ingresar texto
             profesor_sel = st.text_input("Nombre de Profesor:")
 
         password = st.text_input("Contraseña:", type="password")
         btn_submit = st.form_submit_button("Iniciar Sesión")
         
         if btn_submit:
-            # Validación con clave maestra de respaldo O contraseña del profesor en Google Sheets
             es_valido = False
             
-            # Revisa en la lista de profesores
             if not df_profes.empty and "password" in df_profes.columns:
                 prof_data = df_profes[df_profes["nombre"] == profesor_sel]
                 if not prof_data.empty:
@@ -87,7 +82,6 @@ def login():
                     if str(password) == pass_correcta:
                         es_valido = True
             
-            # Clave de emergencia/administrador por si acaso
             if password == "admin123":
                 es_valido = True
 
@@ -99,7 +93,6 @@ def login():
             else:
                 st.error("❌ Contraseña incorrecta. Inténtalo de nuevo.")
 
-# SI NO ESTÁ AUTENTICADO, MUESTRA EL LOGIN Y DETIENE LA EJECUCIÓN
 if not st.session_state["autenticado"]:
     login()
     st.stop()
@@ -108,7 +101,6 @@ if not st.session_state["autenticado"]:
 # A PARTIR DE AQUÍ SOLO ACCEDEN LOS PROFESORES LOGUEADOS
 # =========================================================
 
-# Barra lateral con usuario actual y botón de salir
 st.sidebar.markdown(f"👨‍🏫 **Profesor:** {st.session_state['usuario_actual']}")
 if st.sidebar.button("🚪 Cerrar Sesión"):
     st.session_state["autenticado"] = False
@@ -225,17 +217,88 @@ else:
 
         col1, col2, col3 = st.columns(3)
         col1.metric("Estudiantes Registrados", len(df))
-        col2.metric("Graduados (120h)", len(df[df["horas"] >= 120]))
-        prom = int(df["horas"].mean()) if len(df) > 0 else 0
+        col2.metric("Graduados (120h)", len(df[pd.to_numeric(df["horas"], errors='coerce').fillna(0) >= 120]))
+        prom = int(pd.to_numeric(df["horas"], errors='coerce').fillna(0).mean()) if len(df) > 0 else 0
         col3.metric("Promedio de Horas", f"{prom} hrs")
 
+        # =======================================================
+        # --- NUEVO APARTADO: GENERACIÓN Y DESCARGA DE PDF ---
+        # =======================================================
+        st.divider()
+        st.subheader("📑 Reporte General PDF")
+        
+        def generar_pdf(dataframe):
+            try:
+                from fpdf import FPDF
+            except ImportError:
+                st.error("⚠️ Falta instalar fpdf. Ejecuta 'pip install fpdf' en tu terminal.")
+                return None
+
+            pdf = FPDF()
+            pdf.add_page()
+            
+            # Título y Marca de Tiempo
+            pdf.set_font('Arial', 'B', 15)
+            pdf.cell(0, 10, 'Reporte General de Horas Sociales (120h)', 0, 1, 'C')
+            
+            fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            pdf.set_font('Arial', 'I', 10)
+            pdf.cell(0, 10, f'Generado el: {fecha_actual}', 0, 1, 'C')
+            pdf.ln(5)
+
+            # Preparar los datos numéricamente para evitar errores
+            df_reporte = dataframe.copy()
+            df_reporte['horas'] = pd.to_numeric(df_reporte['horas'], errors='coerce').fillna(0)
+
+            # Filtrar categorías
+            terminaron = df_reporte[df_reporte['horas'] >= 120]
+            faltantes = df_reporte[(df_reporte['horas'] > 0) & (df_reporte['horas'] < 120)]
+            empiezan = df_reporte[df_reporte['horas'] == 0]
+
+            # Función de ayuda para dibujar cada sección en el PDF
+            def agregar_seccion(titulo, datos):
+                pdf.set_font('Arial', 'B', 12)
+                pdf.cell(0, 10, f'{titulo} (Total: {len(datos)} estudiantes)', 0, 1, 'L')
+                pdf.set_font('Arial', '', 10)
+                
+                if datos.empty:
+                    pdf.cell(0, 6, 'Ningun estudiante en esta categoria.', 0, 1, 'L')
+                else:
+                    for idx, row in datos.iterrows():
+                        # Limpiar tildes o caracteres raros para evitar conflictos con fpdf básico
+                        nombre = str(row.get('nombre', 'N/A')).encode('latin-1', 'replace').decode('latin-1')
+                        curso = str(row.get('curso', 'N/A')).encode('latin-1', 'replace').decode('latin-1')
+                        horas = int(row.get('horas', 0))
+                        pdf.cell(0, 6, f'- {nombre} | Curso: {curso} | Horas: {horas}', 0, 1, 'L')
+                pdf.ln(5)
+
+            # Agregar las 3 secciones solicitadas
+            agregar_seccion('YA TERMINARON (120 hrs o mas)', terminaron)
+            agregar_seccion('AUN FALTANTES (En progreso)', faltantes)
+            agregar_seccion('RECIEN EMPIEZAN (0 hrs)', empiezan)
+
+            return pdf.output(dest='S').encode('latin-1')
+
+        # Botón de descarga interactivo
+        pdf_bytes = generar_pdf(df)
+        if pdf_bytes:
+            fecha_str = datetime.now().strftime("%Y%m%d_%H%M")
+            st.download_button(
+                label="📥 Descargar Reporte PDF de Estudiantes",
+                data=pdf_bytes,
+                file_name=f"Reporte_Horas_{fecha_str}.pdf",
+                mime="application/pdf"
+            )
+        # =======================================================
+        
         st.divider()
         st.subheader("📋 Lista de Estudiantes")
 
         for index, row in df.iterrows():
             nombre = row["nombre"]
             curso = row["curso"]
-            horas = int(row["horas"])
+            # Asegurar conversión a número para la UI
+            horas = int(pd.to_numeric(row["horas"], errors='coerce') if pd.notnull(row["horas"]) else 0)
             porcentaje = min(100, int((horas / 120) * 100))
             
             with st.container():
