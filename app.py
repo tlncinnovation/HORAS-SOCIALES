@@ -142,7 +142,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
             
             st.markdown("### 📜 Certificado de Servicio Social")
             try:
-                img_path = "certificado.jpeg"
+                img_path = "Certificado.jpeg"
                 img = Image.open(img_path)
                 draw = ImageDraw.Draw(img)
                 
