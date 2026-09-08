@@ -57,11 +57,21 @@ def cargar_profesores():
 @st.cache_data(ttl=5)
 def cargar_estudiantes():
     try:
-        url = APPS_SCRIPT_URL + "?action=buscar_web&q="
+        # Pide estudiantes con la acción compatible
+        url = APPS_SCRIPT_URL + "?action=obtener_estudiantes"
         res = requests.get(url, timeout=10)
         datos = res.json()
-        if "resultados" in datos:
-            return pd.DataFrame(datos["resultados"])
+        
+        # Soporta tanto 'estudiantes' como 'resultados' por compatibilidad
+        lista = datos.get("estudiantes") or datos.get("resultados") or []
+        
+        if lista:
+            df = pd.DataFrame(lista)
+            # Asegura que existan las columnas clave para evitar errores en Pandas
+            for col in ["nombre", "uid", "curso", "horas", "ultimaFecha"]:
+                if col not in df.columns:
+                    df[col] = "N/A" if col in ["curso", "ultimaFecha"] else (0 if col == "horas" else "")
+            return df
         return pd.DataFrame()
     except Exception as e:
         st.error(f"Error al conectar con Google Sheets: {e}")
@@ -104,11 +114,12 @@ def login():
         
         if btn_submit:
             es_valido = False
-            if not df_profes.empty and "password" in df_profes.columns:
+            if not df_profes.empty:
                 prof_data = df_profes[df_profes["nombre"] == profesor_sel]
                 if not prof_data.empty:
-                    pass_correcta = str(prof_data.iloc[0]["password"])
-                    if str(password) == pass_correcta:
+                    # Soporta las dos claves posibles devueltas por Apps Script
+                    pass_correcta = str(prof_data.iloc[0].get("password") or prof_data.iloc[0].get("contrasena") or "").strip()
+                    if str(password).strip() == pass_correcta:
                         es_valido = True
             
             if password == "admin123":
@@ -223,8 +234,8 @@ if st.session_state["estudiante_seleccionado"] is not None:
     st.subheader("📊 Historial de Registros y Asistencia")
     df_hist = cargar_historial(est["uid"])
 
-    if not df_hist.empty:
-        df_hist["fecha_dt"] = pd.to_datetime(df_hist["fecha"])
+    if not df_hist.empty and "fecha" in df_hist.columns:
+        df_hist["fecha_dt"] = pd.to_datetime(df_hist["fecha"], errors="coerce")
         df_hist["dia"] = df_hist["fecha_dt"].dt.strftime('%d/%m/%Y')
         df_por_dia = df_hist.groupby("dia")["horas"].sum().reset_index()
 
@@ -232,7 +243,8 @@ if st.session_state["estudiante_seleccionado"] is not None:
         st.bar_chart(df_por_dia.set_index("dia")["horas"])
 
         st.markdown("### 📋 Tabla de Asistencia Detallada")
-        df_tabla = df_hist[["fechaTxt", "horas", "profesor"]].rename(columns={
+        cols_mostrar = [c for c in ["fechaTxt", "horas", "profesor"] if c in df_hist.columns]
+        df_tabla = df_hist[cols_mostrar].rename(columns={
             "fechaTxt": "Fecha y Hora",
             "horas": "Horas Sumadas",
             "profesor": "Autorizado Por (Profesor)"
@@ -284,7 +296,7 @@ else:
     if not df.empty:
         st.sidebar.header("🔍 Filtros de Búsqueda")
         busqueda = st.sidebar.text_input("Buscar por Nombre, UID o Curso:")
-        cursos_disponibles = ["Todos"] + sorted(list(df["curso"].unique()))
+        cursos_disponibles = ["Todos"] + sorted(list(df["curso"].astype(str).unique()))
         curso_seleccionado = st.sidebar.selectbox("Filtrar por Curso:", cursos_disponibles)
         
         estado_opciones = ["Todos", "En progreso (< 120h)", "Terminados / Con Certificado (120h)"]
@@ -300,7 +312,7 @@ else:
         elif estado_seleccionado == "Terminados / Con Certificado (120h)":
             df = df[df["horas_num"] >= 120]
 
-        if filtro_fecha is not None:
+        if filtro_fecha is not None and "ultimaFecha" in df.columns:
             fecha_str = filtro_fecha.strftime("%d/%m/%Y")
             fecha_str_alt = filtro_fecha.strftime("%Y-%m-%d")
             df = df[df["ultimaFecha"].astype(str).str.contains(fecha_str, na=False) | 
@@ -308,9 +320,9 @@ else:
 
         if busqueda:
             df = df[
-                df["nombre"].str.contains(busqueda, case=False, na=False) |
+                df["nombre"].astype(str).str.contains(busqueda, case=False, na=False) |
                 df["uid"].astype(str).str.contains(busqueda, case=False, na=False) |
-                df["curso"].str.contains(busqueda, case=False, na=False)
+                df["curso"].astype(str).str.contains(busqueda, case=False, na=False)
             ]
 
         col1, col2, col3 = st.columns(3)
