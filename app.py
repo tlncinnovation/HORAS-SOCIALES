@@ -66,7 +66,6 @@ def cargar_estudiantes():
             df = pd.DataFrame(lista)
             
             # --- NORMALIZACIÓN DE COLUMNAS ---
-            # Limpia espacios en blanco y pasa todo a minúsculas
             df.columns = [str(c).strip().lower() for c in df.columns]
             
             # Búsqueda automática de la columna del documento
@@ -221,7 +220,10 @@ if st.session_state["estudiante_seleccionado"] is not None:
     st.caption(f"📧 Correo Electrónico: {est.get('correo', 'Sin correo registrado')}")
     st.divider()
 
-    horas_actuales = int(pd.to_numeric(est.get("horas", 0), errors="coerce"))
+    # Conversión segura de horas evitando NaN
+    horas_raw = pd.to_numeric(est.get("horas", 0), errors="coerce")
+    horas_actuales = int(0 if pd.isna(horas_raw) else horas_raw)
+    
     faltantes = max(0, 120 - horas_actuales)
     porcentaje = min(100, int((horas_actuales / 120) * 100))
 
@@ -241,18 +243,10 @@ if st.session_state["estudiante_seleccionado"] is not None:
                 font_cert = obtener_fuente(28)
 
                 # --- DATOS DEL CERTIFICADO ---
-                # Nombre
                 draw.text((480, 468), str(est['nombre']).upper(), fill="black", font=font_cert)
-                
-                # Documento TI
                 draw.text((700, 525), doc_ti, fill="black", font=font_cert) 
-                
-                # Curso
                 draw.text((1100, 525), str(est['curso']).upper(), fill="black", font=font_cert)
-                
-                # Jornada (U)
                 draw.text((380, 580), "U", fill="black", font=font_cert) 
-                # -----------------------------
 
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG")
@@ -262,7 +256,7 @@ if st.session_state["estudiante_seleccionado"] is not None:
                 st.download_button(
                     label="📥 Descargar Certificado (Imagen)",
                     data=img_bytes,
-                    file_name=f"Certificado_{est['nombre'].replace(' ', '_')}.jpg",
+                    file_name=f"Certificado_{str(est['nombre']).replace(' ', '_')}.jpg",
                     mime="image/jpeg"
                 )
             except FileNotFoundError:
@@ -294,25 +288,39 @@ if st.session_state["estudiante_seleccionado"] is not None:
 
     st.divider()
 
+    # =========================================================
+    # HISTORIAL DE REGISTROS Y ASISTENCIA (CORREGIDO)
+    # =========================================================
     st.subheader("📊 Historial de Registros y Asistencia")
     df_hist = cargar_historial(est["uid"])
 
-    if not df_hist.empty and "fecha" in df_hist.columns:
-        df_hist["fecha_dt"] = pd.to_datetime(df_hist["fecha"], errors="coerce")
-        df_hist["dia"] = df_hist["fecha_dt"].dt.strftime('%d/%m/%Y')
-        df_por_dia = df_hist.groupby("dia")["horas"].sum().reset_index()
+    if not df_hist.empty:
+        col_fecha = None
+        for pos_col in ["fechaIso", "fechaTxt", "fecha"]:
+            if pos_col in df_hist.columns:
+                col_fecha = pos_col
+                break
 
-        st.markdown("### 📈 Horas Sumadas por Día")
-        st.bar_chart(df_por_dia.set_index("dia")["horas"])
+        if col_fecha:
+            df_hist["fecha_dt"] = pd.to_datetime(df_hist[col_fecha], dayfirst=True, errors="coerce")
+            df_hist["dia"] = df_hist["fecha_dt"].dt.strftime('%d/%m/%Y')
+            df_hist["horas"] = pd.to_numeric(df_hist["horas"], errors="coerce").fillna(0)
 
-        st.markdown("### 📋 Tabla de Asistencia Detallada")
-        cols_mostrar = [c for c in ["fechaTxt", "horas", "profesor"] if c in df_hist.columns]
-        df_tabla = df_hist[cols_mostrar].rename(columns={
-            "fechaTxt": "Fecha y Hora",
-            "horas": "Horas Sumadas",
-            "profesor": "Autorizado Por (Profesor)"
-        })
-        st.dataframe(df_tabla, use_container_width=True)
+            df_por_dia = df_hist.groupby("dia", as_index=False)["horas"].sum()
+
+            st.markdown("### 📈 Horas Sumadas por Día")
+            st.bar_chart(data=df_por_dia, x="dia", y="horas")
+
+            st.markdown("### 📋 Tabla de Asistencia Detallada")
+            cols_mostrar = [c for c in ["fechaTxt", "horas", "profesor"] if c in df_hist.columns]
+            df_tabla = df_hist[cols_mostrar].rename(columns={
+                "fechaTxt": "Fecha y Hora",
+                "horas": "Horas Sumadas",
+                "profesor": "Autorizado Por (Profesor)"
+            })
+            st.dataframe(df_tabla, use_container_width=True)
+        else:
+            st.warning("No se encontró un formato de fecha válido en el historial.")
     else:
         st.warning("Este estudiante aún no tiene registros detallados en el Historial.")
 
