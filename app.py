@@ -260,8 +260,8 @@ if st.session_state["estudiante_seleccionado"] is not None:
             st.markdown("### 📜 Certificado de Servicio Social")
 
             posibles_archivos = [
-                "Certificado1.jpg", "Certificado1.png", "Certificado1.jpeg",
-                "certificado1.jpg", "certificado1.png", "certificado1.jpeg",
+                "Certificado2.jpg", "Certificado1.png", "Certificado1.jpeg",
+                "certificado2.jpg", "certificado1.png", "certificado1.jpeg",
             ]
             ruta_certificado = next((f for f in posibles_archivos if os.path.exists(f)), None)
 
